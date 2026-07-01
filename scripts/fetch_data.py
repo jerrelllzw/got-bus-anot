@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Fetch Singapore bus schedule data from LTA DataMall and write a compact
-static ``data/data.json`` for the Last Bus web app.
+"""Fetch Singapore bus schedule data from LTA DataMall and write compact
+static per-service JSON shards for the Last Bus web app.
 
 The LTA DataMall API is *not* CORS-enabled and the account key must stay
 secret, so we pull the data server-side (in CI) and commit a plain JSON file
@@ -16,20 +16,24 @@ Both endpoints paginate 500 records per call via the ``$skip`` query param.
 
 Requires the environment variable ``LTA_ACCOUNT_KEY``.
 
-Output shape (kept deliberately compact to minimise the committed file size)::
+Output is **sharded** so the browser only ever downloads the one service the
+user asked about, instead of a single multi-megabyte blob:
 
-    {
-      "generated": "2026-07-01T09:00:00Z",
-      "routes": [
-        [ServiceNo, Direction, StopSequence, BusStopCode,
-         WD_First, WD_Last, SAT_First, SAT_Last, SUN_First, SUN_Last],
-        ...
-      ],
-      "stops": {
-        "BusStopCode": [RoadName, Description, Latitude, Longitude],
-        ...
+    data/services.json                  # tiny index the page loads at boot
+      { "generated": "...", "services": ["10", "196", "NR7", ...] }
+
+    data/svc/<SERVICE>.json             # one file per service (uppercased name)
+      {
+        "service": "196",
+        "generated": "...",
+        "stops":  { "BusStopCode": [RoadName, Description, Latitude, Longitude] },
+        "routes": [ [Direction, StopSequence, BusStopCode,
+                     WD_First, WD_Last, SAT_First, SAT_Last,
+                     SUN_First, SUN_Last], ... ]
       }
-    }
+
+Each shard embeds only the stops on that service's route, so no global stop
+map has to be downloaded. Both indices and shards are minified.
 """
 
 from __future__ import annotations
@@ -54,9 +58,11 @@ REQUEST_TIMEOUT = 30     # seconds
 MAX_RETRIES = 4          # per page, with exponential backoff
 RETRY_BACKOFF = 2.0      # seconds (doubles each retry)
 
-# Write to <repo>/data/data.json regardless of the working directory.
+# Write to <repo>/data/ regardless of the working directory.
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OUTPUT_PATH = REPO_ROOT / "data" / "data.json"
+DATA_DIR = REPO_ROOT / "data"
+SVC_DIR = DATA_DIR / "svc"
+INDEX_PATH = DATA_DIR / "services.json"
 
 
 def load_dotenv() -> None:
@@ -171,6 +177,62 @@ def compact_stops(raw_stops: list[dict]) -> dict[str, list]:
     return stops
 
 
+def _write_json(path: Path, obj) -> None:
+    """Write ``obj`` as minified UTF-8 JSON."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
+
+
+def write_shards(generated: str, routes: list[list], stops: dict[str, list]) -> None:
+    """Group compact route records by service and write one shard per service
+    plus a small ``services.json`` index.
+
+    ``routes`` are the 10-element compact records produced by
+    :func:`compact_routes` (service number in position 0). Each shard drops the
+    service number (it's implied by the filename) and embeds only the stops that
+    appear on that service's route.
+    """
+    # Group by uppercased service name so client lookups are case-insensitive.
+    by_service: dict[str, dict] = {}
+    for r in routes:
+        service = str(r[0]).strip()
+        if not service:
+            continue
+        key = service.upper()
+        entry = by_service.setdefault(key, {"service": service, "routes": [], "codes": set()})
+        entry["routes"].append(r[1:])       # [Direction, Seq, Code, WD_First, ...]
+        code = r[3]
+        if code:
+            entry["codes"].add(code)
+
+    # Start each run from a clean slate so services that disappear upstream are
+    # not left behind as stale shards.
+    if SVC_DIR.exists():
+        for old in SVC_DIR.glob("*.json"):
+            old.unlink()
+    SVC_DIR.mkdir(parents=True, exist_ok=True)
+
+    for key, entry in by_service.items():
+        sub_stops = {c: stops[c] for c in entry["codes"] if c in stops}
+        _write_json(SVC_DIR / f"{key}.json", {
+            "service": entry["service"],
+            "generated": generated,
+            "stops": sub_stops,
+            "routes": entry["routes"],
+        })
+
+    _write_json(INDEX_PATH, {
+        "generated": generated,
+        "services": sorted(by_service.keys()),
+    })
+
+    total_kb = sum(p.stat().st_size for p in SVC_DIR.glob("*.json")) / 1024
+    print(
+        f"Wrote {len(by_service)} service shards to {SVC_DIR.relative_to(REPO_ROOT)}/ "
+        f"and {INDEX_PATH.relative_to(REPO_ROOT)} — {total_kb:.0f} KB total"
+    )
+
+
 def main() -> None:
     account_key = get_account_key()
 
@@ -180,22 +242,9 @@ def main() -> None:
     if not raw_routes or not raw_stops:
         sys.exit("ERROR: got an empty response from LTA — aborting so we don't overwrite good data.")
 
-    data = {
-        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "routes": compact_routes(raw_routes),
-        "stops": compact_stops(raw_stops),
-    }
-
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    # Minified (no indentation / spaces) to keep the committed file small.
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
-
-    size_kb = OUTPUT_PATH.stat().st_size / 1024
-    print(
-        f"Wrote {OUTPUT_PATH.relative_to(REPO_ROOT)} — "
-        f"{len(data['routes'])} route records, {len(data['stops'])} stops, {size_kb:.0f} KB"
-    )
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    write_shards(generated, compact_routes(raw_routes), compact_stops(raw_stops))
 
 
 if __name__ == "__main__":

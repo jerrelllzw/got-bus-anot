@@ -157,6 +157,19 @@ html, body {
   overflow-y: auto;
 }
 
+/* Direction section header inside the results list. */
+.stop-results__group {
+  position: sticky;
+  top: 0;
+  padding: 0.4rem 0.9rem;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
 .stop-results__item {
   padding: 0.6rem 0.9rem;
   cursor: pointer;
@@ -212,6 +225,40 @@ html, body {
   margin: 0.2rem 0 0;
   font-size: 0.75rem;
   color: var(--text-dim);
+}
+
+/* --- Direction switcher --------------------------------------------------- */
+
+.dir-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+
+.dir-tab {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.dir-tab:hover { border-color: var(--accent); }
+.dir-tab:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.18);
+}
+
+.dir-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: rgba(255, 176, 0, 0.08);
 }
 
 /* --- Times table ---------------------------------------------------------- */

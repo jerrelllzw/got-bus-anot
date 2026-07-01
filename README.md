@@ -13,18 +13,28 @@ The [LTA DataMall](https://datamall.lta.gov.sg/) API isn't CORS-enabled and its
 account key must stay secret, so the browser can't call it directly. Instead:
 
 1. `scripts/fetch_data.py` pulls the **BusRoutes** and **BusStops** datasets
-   from LTA (server-side) and writes a compact `data/data.json`.
+   from LTA (server-side) and writes **sharded** JSON: a tiny index plus one
+   small file per bus service.
 2. A scheduled **GitHub Action** runs that script weekly and commits the
    refreshed data back to the repo.
-3. `index.html` / `style.css` / `script.js` just read that static JSON —
-   instant loads, no exposed key, no server.
+3. `index.html` / `style.css` / `script.js` read that static JSON —
+   the page loads a few KB for the one service you ask about, not a big blob.
+
+Because the data is split per service, a visitor downloads roughly **5 KB**
+(one service shard) instead of a multi-megabyte combined file. Shards are
+cache-busted by the dataset's `generated` timestamp, so browsers cache them
+until the next weekly refresh.
 
 ```
-scripts/fetch_data.py        # LTA -> data/data.json (paginated, compacted)
-.github/workflows/           # weekly + manual refresh, commits data.json
+scripts/fetch_data.py        # LTA -> sharded data/ (paginated, compacted)
+.github/workflows/           # weekly + manual refresh, commits the shards
   update-data.yml
-data/data.json               # the committed dataset (sample until you fetch real)
+data/services.json           # index: { generated, services: [...] }  (loaded at boot)
+data/svc/<SERVICE>.json      # one shard per service (stops embedded), loaded on demand
+data/holidays.json           # dates that use the Sun/PH schedule (hand-maintained)
+logic.js                     # pure, unit-tested helpers (times, distance, status)
 index.html / style.css / script.js   # the static site
+tests/logic.test.js          # Node unit tests for logic.js
 ```
 
 ## Setup
@@ -48,11 +58,11 @@ appears in the repo or the built site.
 
 ### 3. Generate real data (first run)
 
-The repo ships with a small **sample** `data/data.json` so the page works
-immediately. To pull the real ~23,000-record dataset:
+The repo ships with committed shards under `data/svc/` so the page works
+immediately. To refresh from LTA (the ~23,000-record dataset):
 
 - **In CI:** go to the **Actions** tab → **Update bus data** → **Run workflow**.
-  It fetches from LTA and commits the real `data/data.json`.
+  It fetches from LTA and commits the refreshed shards + `data/services.json`.
 - **Locally** (optional), if you have Python 3.9+:
 
   ```bash
@@ -65,7 +75,8 @@ immediately. To pull the real ~23,000-record dataset:
   python scripts/fetch_data.py
   ```
 
-  This overwrites `data/data.json`. Commit it if you want (CI will keep it
+  This regenerates `data/svc/*.json` and `data/services.json` (it never
+  touches `data/holidays.json`). Commit them if you want (CI will keep them
   fresh afterwards). The script uses only the Python standard library — no
   `pip install` needed.
 
@@ -82,9 +93,13 @@ That's it — the weekly Action keeps the schedule data current.
 
 1. Enter a **bus service number** (e.g. `196`).
 2. Search for a **stop** along that route — by name, road, or 5-digit code —
-   or tap **📍 Near me** to rank stops on the route by distance from you.
+   or tap **📍 Near me** to rank stops on the route by distance from you. The
+   results are **split into the two travel directions** (each labelled by its
+   terminal) so you can pick the side heading the way you want.
 3. Read the **first/last** times for Weekday / Saturday / Sun-PH (today's row
-   is highlighted), plus a live status line for the last bus:
+   is highlighted). If the stop is served in **both directions**, a switcher
+   (labelled by each direction's terminal) lets you flip between them. There's
+   also a live status line for the last bus:
    - *Plenty of time* — last bus is >45 min away
    - *Due soon* — within 45 min, with a rough countdown
    - *Past scheduled* — just past the time, may still be running late
@@ -92,7 +107,7 @@ That's it — the weekly Action keeps the schedule data current.
 
 ## Local preview
 
-Because the page fetches `data/data.json`, open it via a local web server
+Because the page fetches JSON from `data/`, open it via a local web server
 (not `file://`):
 
 ```bash
@@ -100,11 +115,25 @@ python -m http.server 8000
 # then visit http://localhost:8000
 ```
 
+## Tests
+
+The date/time and distance logic lives in `logic.js` as pure functions, unit
+tested with Node's built-in runner (no dependencies to install):
+
+```bash
+npm test        # or: node --test
+```
+
 ## Known limitations
 
-- **No public-holiday calendar.** The *Sun / PH* row is LTA's own combined
-  Sunday/public-holiday schedule; the app simply shows Sunday times on Sundays.
-  It does **not** detect public holidays that fall on weekdays.
+- **Public holidays are a hand-maintained list.** On dates listed in
+  `data/holidays.json` the app shows the *Sun / PH* schedule. Only the
+  fixed-date 2026 holidays (New Year's Day, Labour Day, National Day,
+  Christmas) are seeded, because they're the same every year. The
+  variable-date holidays (Chinese New Year, Good Friday, Hari Raya Puasa,
+  Vesak Day, Hari Raya Haji, Deepavali) change yearly and **must be added**
+  from [MOM's official gazette](https://www.mom.gov.sg/employment-practices/public-holidays)
+  — otherwise those days fall back to the normal weekday/Saturday split.
 - **No live vehicle tracking.** LTA's real-time Bus Arrival endpoint also isn't
   reachable from a static page without a proxy, so this app is scheduled-only.
 - **After-midnight edge cases.** Times like `0030` are treated as belonging to

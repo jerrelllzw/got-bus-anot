@@ -1,0 +1,10 @@
+{
+  "_note": "Singapore public holidays as YYYY-MM-DD (local). On these dates the app shows the 'Sun / PH' schedule. Only the four FIXED-DATE 2026 holidays are seeded here because they are the same every year and always correct. The variable-date holidays (Chinese New Year, Good Friday, Hari Raya Puasa, Vesak Day, Hari Raya Haji, Deepavali) change yearly and MUST be added from MOM's official gazette: https://www.mom.gov.sg/employment-practices/public-holidays . Add each observed date (including any Monday observed when a holiday falls on a Sunday).",
+  "holidays": [
+    "2026-01-01",
+    "2026-05-01",
+    "2026-08-09",
+    "2026-08-10",
+    "2026-12-25"
+  ]
+}

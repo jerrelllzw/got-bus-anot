@@ -53,6 +53,11 @@
             type="text"
             placeholder="Search stop name, road, or code"
             aria-describedby="stop-hint"
+            role="combobox"
+            aria-controls="stop-results"
+            aria-expanded="false"
+            aria-autocomplete="list"
+            autocomplete="off"
             disabled
           />
           <button
@@ -76,6 +81,8 @@
       <div class="result__head">
         <h2 class="result__stop" id="result-stop"></h2>
         <p class="result__meta" id="result-meta"></p>
+        <!-- Direction switcher — shown only when a stop is served both ways -->
+        <div class="dir-tabs" id="dir-tabs" role="tablist" hidden></div>
       </div>
 
       <table class="times">
@@ -109,13 +116,14 @@
       </p>
       <p class="footer__disclaimer">
         Not affiliated with or endorsed by LTA. Scheduled times only — no live
-        vehicle tracking. Sun/PH times are a stand-in and are not verified
-        against a public-holiday calendar.
+        vehicle tracking. Public holidays use the Sun/PH schedule only for
+        dates in the app's holiday list.
       </p>
       <p class="footer__freshness">Data updated: <span id="data-timestamp">—</span></p>
     </footer>
   </main>
 
+  <script src="logic.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

@@ -1,0 +1,10 @@
+{
+  "name": "last-bus-when-ah",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scheduled first & last Singapore bus times — static site.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}

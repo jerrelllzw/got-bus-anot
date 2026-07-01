@@ -1,6 +1,6 @@
 name: Update bus data
 
-# Refresh the static data.json from LTA DataMall.
+# Refresh the static per-service data shards from LTA DataMall.
 # Schedules rarely change, so weekly is plenty; workflow_dispatch lets you
 # trigger a manual run (e.g. the first time, to generate real data).
 on:
@@ -9,7 +9,7 @@ on:
     - cron: "0 9 * * 1"
   workflow_dispatch:
 
-# Allow the job to push the refreshed data.json back to the repo.
+# Allow the job to push the refreshed data back to the repo.
 permissions:
   contents: write
 
@@ -40,10 +40,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/data.json
+          # Stage shards, the index, and any removed services. holidays.json is
+          # maintained by hand and untouched by the fetch script.
+          git add -A data/svc data/services.json
           # Only commit if the data actually changed.
           if git diff --staged --quiet; then
-            echo "No changes to data.json — nothing to commit."
+            echo "No changes to bus data — nothing to commit."
           else
             git commit -m "chore: refresh bus data $(date -u +%Y-%m-%d)"
             git push
