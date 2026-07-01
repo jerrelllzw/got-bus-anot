@@ -92,6 +92,7 @@ html, body {
 }
 
 .field__row { display: flex; gap: 0.5rem; }
+.field__row--between { justify-content: space-between; align-items: center; }
 
 /* Wraps an input so the clear button can sit inside its right edge. */
 .field__control { position: relative; flex: 1; min-width: 0; display: flex; }
@@ -178,33 +179,45 @@ html, body {
 }
 .locate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* --- Stop search results (autocomplete list) ------------------------------ */
+/* --- Stop lists (one column per direction) -------------------------------- */
 
-.stop-results {
-  list-style: none;
-  margin: 0.25rem 0 0;
-  padding: 0;
+.stop-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stop-list {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  max-height: 15rem;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-/* Direction section header inside the results list. */
-.stop-results__group {
-  position: sticky;
-  top: 0;
-  padding: 0.4rem 0.9rem;
+/* Direction header (labelled by that direction's terminal). */
+.stop-list__head {
+  margin: 0;
+  padding: 0.5rem 0.9rem;
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
   font-size: 0.66rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--accent);
 }
 
-.stop-results__item {
+/* The stops scroll within each direction so both lists stay on screen. */
+.stop-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.stop-list__item {
   padding: 0.6rem 0.9rem;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
@@ -214,21 +227,28 @@ html, body {
   gap: 0.75rem;
 }
 
-.stop-results__item:last-child { border-bottom: none; }
+.stop-list__item:last-child { border-bottom: none; }
+.stop-list__item:hover { background: var(--panel-2); }
 
-.stop-results__item:hover,
-.stop-results__item[aria-selected="true"] {
-  background: var(--panel-2);
+.stop-list__item.is-selected {
+  background: rgba(255, 176, 0, 0.08);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.stop-results__name { font-size: 0.92rem; }
-.stop-results__sub {
+.stop-list__item:focus-visible {
+  outline: none;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 2px var(--accent-dim);
+}
+
+.stop-list__name { font-size: 0.92rem; }
+.stop-list__sub {
   display: block;
   font-size: 0.72rem;
   color: var(--text-dim);
 }
 
-.stop-results__dist {
+.stop-list__dist {
   flex: 0 0 auto;
   font-size: 0.75rem;
   color: var(--accent);

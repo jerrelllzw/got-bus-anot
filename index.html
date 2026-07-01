@@ -53,46 +53,23 @@
         <p class="field__hint" id="service-hint">Enter a service number to load its stops.</p>
       </div>
 
-      <!-- Field 2: stop search (name / road / code), enabled after a service loads -->
+      <!-- Field 2: the route's stops, listed one column per direction. -->
       <div class="field">
-        <label class="field__label" for="stop-input">Bus stop</label>
-        <div class="field__row">
-          <div class="field__control">
-            <input
-              class="field__input"
-              id="stop-input"
-              type="text"
-              placeholder="Search stop name, road, or code"
-              aria-describedby="stop-hint"
-              role="combobox"
-              aria-controls="stop-results"
-              aria-expanded="false"
-              aria-autocomplete="list"
-              autocomplete="off"
-              disabled
-            />
-            <button
-              class="input-clear"
-              id="stop-clear"
-              type="button"
-              title="Clear bus stop"
-              aria-label="Clear bus stop"
-              hidden
-            >&times;</button>
-          </div>
+        <div class="field__row field__row--between">
+          <span class="field__label">Bus stops</span>
           <button
             class="locate-btn"
             id="locate-btn"
             type="button"
-            title="Show nearest stops on this route"
+            title="Sort each list by distance from you"
             disabled
           >
             📍 Near me
           </button>
         </div>
         <p class="field__hint" id="stop-hint">Pick a service first.</p>
-        <!-- Autocomplete-style results for the stop search -->
-        <ul class="stop-results" id="stop-results" role="listbox" hidden></ul>
+        <!-- Two lists (one per direction), populated once a service loads. -->
+        <div class="stop-lists" id="stop-lists"></div>
       </div>
     </form>
 

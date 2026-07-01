@@ -92,10 +92,10 @@ That's it — the weekly Action keeps the schedule data current.
 ## Using the app
 
 1. Enter a **bus service number** (e.g. `196`).
-2. Search for a **stop** along that route — by name, road, or 5-digit code —
-   or tap **📍 Near me** to rank stops on the route by distance from you. The
-   results are **split into the two travel directions** (each labelled by its
-   terminal) so you can pick the side heading the way you want.
+2. The route's stops appear as **two lists — one per travel direction** (each
+   labelled by its terminal), so you can scan the side heading the way you
+   want and **tap a stop** for its times. Tap **📍 Near me** to sort each list
+   by distance from you.
 3. Read the **first/last** times for Weekday / Saturday / Sun-PH (today's row
    is highlighted). If the stop is served in **both directions**, a switcher
    (labelled by each direction's terminal) lets you flip between them. There's
