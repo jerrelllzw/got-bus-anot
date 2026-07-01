@@ -1,0 +1,17 @@
+# Never commit the LTA account key or any local secrets.
+.env
+.env.*
+*.key
+secrets.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

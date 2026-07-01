@@ -1,0 +1,297 @@
+/* ============================================================================
+   Last Bus When Ah? — transit departure-board aesthetic.
+   Near-black background, single amber/LED accent, monospace for data.
+   Mobile-first, single-screen, restrained. Respects reduced motion.
+   ========================================================================= */
+
+:root {
+  --bg:        #0a0a0b;
+  --panel:     #141416;
+  --panel-2:   #1c1c20;
+  --border:    #2a2a30;
+  --text:      #e8e8ea;
+  --text-dim:  #8a8a92;
+  --accent:    #ffb000; /* amber LED */
+  --accent-dim:#8a6010;
+  --danger:    #ff5c5c;
+  --good:      #5cd08a;
+
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-sans: "Space Grotesk", system-ui, -apple-system, sans-serif;
+
+  --radius: 10px;
+  --maxw: 34rem;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.header { text-align: center; }
+
+.header__title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: clamp(1.75rem, 7vw, 2.6rem);
+  letter-spacing: 0.1em;
+  margin: 0;
+  color: var(--accent);
+  text-shadow: 0 0 18px rgba(255, 176, 0, 0.35);
+}
+
+/* "WHEN AH?" gets a hollow/outlined treatment so the wordmark reads as two beats. */
+.header__title-when {
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--accent);
+  text-shadow: none;
+}
+
+.header__subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+}
+
+/* --- Controls / form ------------------------------------------------------ */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.field { position: relative; display: flex; flex-direction: column; gap: 0.4rem; }
+
+.field__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.field__row { display: flex; gap: 0.5rem; }
+
+.field__input {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  padding: 0.75rem 0.9rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field__input::placeholder { color: #55555c; }
+
+.field__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.18);
+}
+
+.field__input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.field__hint {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.locate-btn {
+  flex: 0 0 auto;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.locate-btn:hover:not(:disabled) { border-color: var(--accent); }
+.locate-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.18);
+}
+.locate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* --- Stop search results (autocomplete list) ------------------------------ */
+
+.stop-results {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.stop-results__item {
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.stop-results__item:last-child { border-bottom: none; }
+
+.stop-results__item:hover,
+.stop-results__item[aria-selected="true"] {
+  background: var(--panel-2);
+}
+
+.stop-results__name { font-size: 0.92rem; }
+.stop-results__sub {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.stop-results__dist {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+}
+
+/* --- Result panel --------------------------------------------------------- */
+
+.result {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.1rem 1.25rem;
+}
+
+.result__head { margin-bottom: 0.9rem; }
+
+.result__stop {
+  font-family: var(--font-sans);
+  font-size: 1.15rem;
+  margin: 0;
+  color: var(--text);
+}
+
+.result__meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* --- Times table ---------------------------------------------------------- */
+
+.times {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.times th,
+.times td {
+  text-align: left;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.times th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.times td { font-size: 1.05rem; }
+.times td:first-child { color: var(--text-dim); font-size: 0.9rem; }
+
+.times tbody tr:last-child td { border-bottom: none; }
+
+/* Today's row is highlighted in the accent colour. */
+.times tr.is-today td {
+  color: var(--accent);
+  background: rgba(255, 176, 0, 0.06);
+}
+.times tr.is-today td:first-child { color: var(--accent); font-weight: 700; }
+
+/* --- Status / countdown line ---------------------------------------------- */
+
+.status {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  border-left: 3px solid var(--accent);
+  font-size: 0.92rem;
+}
+
+.status.is-soon    { border-left-color: var(--accent); color: var(--accent); }
+.status.is-late    { border-left-color: var(--danger); color: var(--danger); }
+.status.is-ended   { border-left-color: var(--text-dim); color: var(--text-dim); }
+.status.is-plenty  { border-left-color: var(--good); color: var(--good); }
+
+/* --- Message / empty state ------------------------------------------------ */
+
+.message {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 1rem;
+}
+
+/* --- Footer --------------------------------------------------------------- */
+
+.footer {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.footer p { margin: 0 0 0.5rem; }
+.footer a { color: var(--text-dim); text-decoration: underline; }
+.footer a:hover { color: var(--accent); }
+.footer__freshness { color: #55555c; }
+
+/* --- Reduced motion ------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

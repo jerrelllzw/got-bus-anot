@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Scheduled first and last bus times for any Singapore bus service and stop." />
+  <title>Last Bus When Ah?</title>
+
+  <!-- Emoji favicon via inline SVG — no separate icon file to ship. -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%8C%3C/text%3E%3C/svg%3E" />
+
+  <!-- Fonts: Space Grotesk for the title, JetBrains Mono for data/times. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <!-- Header: departure-board style title -->
+    <header class="header">
+      <h1 class="header__title">LAST&nbsp;BUS <span class="header__title-when">WHEN&nbsp;AH?</span></h1>
+      <p class="header__subtitle">Scheduled first &amp; last bus · Singapore</p>
+    </header>
+
+    <!-- Search form -->
+    <form class="controls" id="search-form" autocomplete="off">
+      <!-- Field 1: bus service number -->
+      <div class="field">
+        <label class="field__label" for="service-input">Bus service</label>
+        <input
+          class="field__input"
+          id="service-input"
+          type="text"
+          inputmode="numeric"
+          placeholder="e.g. 196"
+          aria-describedby="service-hint"
+        />
+        <p class="field__hint" id="service-hint">Enter a service number to load its stops.</p>
+      </div>
+
+      <!-- Field 2: stop search (name / road / code), enabled after a service loads -->
+      <div class="field">
+        <label class="field__label" for="stop-input">Bus stop</label>
+        <div class="field__row">
+          <input
+            class="field__input"
+            id="stop-input"
+            type="text"
+            placeholder="Search stop name, road, or code"
+            aria-describedby="stop-hint"
+            disabled
+          />
+          <button
+            class="locate-btn"
+            id="locate-btn"
+            type="button"
+            title="Show nearest stops on this route"
+            disabled
+          >
+            📍 Near me
+          </button>
+        </div>
+        <p class="field__hint" id="stop-hint">Pick a service first.</p>
+        <!-- Autocomplete-style results for the stop search -->
+        <ul class="stop-results" id="stop-results" role="listbox" hidden></ul>
+      </div>
+    </form>
+
+    <!-- Result panel: hidden until a stop is chosen -->
+    <section class="result" id="result" hidden aria-live="polite">
+      <div class="result__head">
+        <h2 class="result__stop" id="result-stop"></h2>
+        <p class="result__meta" id="result-meta"></p>
+      </div>
+
+      <table class="times">
+        <thead>
+          <tr>
+            <th scope="col">Day</th>
+            <th scope="col">First</th>
+            <th scope="col">Last</th>
+          </tr>
+        </thead>
+        <tbody id="times-body">
+          <!-- rows injected by script.js -->
+        </tbody>
+      </table>
+
+      <!-- Live countdown / status line -->
+      <p class="status" id="status" role="status"></p>
+    </section>
+
+    <!-- Empty / message state -->
+    <p class="message" id="message" hidden></p>
+
+    <!-- Footer: attribution + disclaimer + data freshness -->
+    <footer class="footer">
+      <p class="footer__attribution">
+        Contains information from
+        <a href="https://datamall.lta.gov.sg/" target="_blank" rel="noopener">LTA DataMall</a>
+        accessed under the
+        <a href="https://datamall.lta.gov.sg/content/dam/datamall/datasets/Legal/Singapore%20Open%20Data%20Licence.pdf"
+           target="_blank" rel="noopener">Singapore Open Data Licence v1.0</a>.
+      </p>
+      <p class="footer__disclaimer">
+        Not affiliated with or endorsed by LTA. Scheduled times only — no live
+        vehicle tracking. Sun/PH times are a stand-in and are not verified
+        against a public-holiday calendar.
+      </p>
+      <p class="footer__freshness">Data updated: <span id="data-timestamp">—</span></p>
+    </footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
