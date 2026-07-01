@@ -49,7 +49,9 @@ let activeDir = null;        // which direction's times are on screen
 // --- DOM refs --------------------------------------------------------------
 const el = {
   serviceInput: document.getElementById("service-input"),
+  serviceClear: document.getElementById("service-clear"),
   stopInput:    document.getElementById("stop-input"),
+  stopClear:    document.getElementById("stop-clear"),
   stopHint:     document.getElementById("stop-hint"),
   serviceHint:  document.getElementById("service-hint"),
   locateBtn:    document.getElementById("locate-btn"),
@@ -110,12 +112,17 @@ async function init() {
 
 function wireEvents() {
   el.serviceInput.addEventListener("input", onServiceInput);
-  el.stopInput.addEventListener("input", () => renderStopResults(el.stopInput.value));
+  el.stopInput.addEventListener("input", () => {
+    updateClear(el.stopInput, el.stopClear);
+    renderStopResults(el.stopInput.value);
+  });
   el.stopInput.addEventListener("focus", () => {
     if (el.stopInput.value.trim() === "") renderStopResults("");
   });
   el.stopInput.addEventListener("keydown", onStopKeydown);
   el.locateBtn.addEventListener("click", onLocate);
+  el.serviceClear.addEventListener("click", onServiceClear);
+  el.stopClear.addEventListener("click", onStopClear);
 
   // Prevent the form from actually submitting/reloading.
   document.getElementById("search-form").addEventListener("submit", (e) => e.preventDefault());
@@ -137,6 +144,7 @@ function wireEvents() {
 
 async function onServiceInput() {
   const service = el.serviceInput.value.trim().toUpperCase();
+  updateClear(el.serviceInput, el.serviceClear);
   resetResult();
   hideStopResults();
 
@@ -220,6 +228,7 @@ function disableStopSearch(hint) {
   el.stopInput.disabled = true;
   el.locateBtn.disabled = true;
   el.stopHint.textContent = hint;
+  updateClear(el.stopInput, el.stopClear);
 }
 
 // ===========================================================================
@@ -375,6 +384,28 @@ function onStopKeydown(e) {
   }
 }
 
+/** Clear the service field and reset everything downstream of it. */
+function onServiceClear() {
+  el.serviceInput.value = "";
+  onServiceInput();          // resets result, disables/clears stop search
+  el.serviceInput.focus();
+}
+
+/** Clear the stop field, drop the result panel, and reopen the full list. */
+function onStopClear() {
+  el.stopInput.value = "";
+  updateClear(el.stopInput, el.stopClear);
+  resetResult();
+  el.message.hidden = true;
+  renderStopResults("");
+  el.stopInput.focus();
+}
+
+/** Show a field's clear button only when it holds text and is enabled. */
+function updateClear(input, btn) {
+  btn.hidden = input.disabled || input.value === "";
+}
+
 // ===========================================================================
 // Geolocation — "near me"
 // ===========================================================================
@@ -429,6 +460,7 @@ function selectStop(code, preferredDir) {
   const stopName = stop ? (stop[S.DESC] || stop[S.ROAD]) : `Stop ${code}`;
   el.resultStop.textContent = stopName;
   el.stopInput.value = stopName;
+  updateClear(el.stopInput, el.stopClear);
 
   renderDirTabs(code);
 

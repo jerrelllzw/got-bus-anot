@@ -32,14 +32,24 @@
       <!-- Field 1: bus service number -->
       <div class="field">
         <label class="field__label" for="service-input">Bus service</label>
-        <input
-          class="field__input"
-          id="service-input"
-          type="text"
-          inputmode="numeric"
-          placeholder="e.g. 196"
-          aria-describedby="service-hint"
-        />
+        <div class="field__control">
+          <input
+            class="field__input"
+            id="service-input"
+            type="text"
+            inputmode="numeric"
+            placeholder="e.g. 196"
+            aria-describedby="service-hint"
+          />
+          <button
+            class="input-clear"
+            id="service-clear"
+            type="button"
+            title="Clear bus service"
+            aria-label="Clear bus service"
+            hidden
+          >&times;</button>
+        </div>
         <p class="field__hint" id="service-hint">Enter a service number to load its stops.</p>
       </div>
 
@@ -47,19 +57,29 @@
       <div class="field">
         <label class="field__label" for="stop-input">Bus stop</label>
         <div class="field__row">
-          <input
-            class="field__input"
-            id="stop-input"
-            type="text"
-            placeholder="Search stop name, road, or code"
-            aria-describedby="stop-hint"
-            role="combobox"
-            aria-controls="stop-results"
-            aria-expanded="false"
-            aria-autocomplete="list"
-            autocomplete="off"
-            disabled
-          />
+          <div class="field__control">
+            <input
+              class="field__input"
+              id="stop-input"
+              type="text"
+              placeholder="Search stop name, road, or code"
+              aria-describedby="stop-hint"
+              role="combobox"
+              aria-controls="stop-results"
+              aria-expanded="false"
+              aria-autocomplete="list"
+              autocomplete="off"
+              disabled
+            />
+            <button
+              class="input-clear"
+              id="stop-clear"
+              type="button"
+              title="Clear bus stop"
+              aria-label="Clear bus stop"
+              hidden
+            >&times;</button>
+          </div>
           <button
             class="locate-btn"
             id="locate-btn"

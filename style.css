@@ -93,6 +93,9 @@ html, body {
 
 .field__row { display: flex; gap: 0.5rem; }
 
+/* Wraps an input so the clear button can sit inside its right edge. */
+.field__control { position: relative; flex: 1; min-width: 0; display: flex; }
+
 .field__input {
   flex: 1;
   min-width: 0;
@@ -102,7 +105,7 @@ html, body {
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 1.1rem;
-  padding: 0.75rem 0.9rem;
+  padding: 0.75rem 2.4rem 0.75rem 0.9rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -121,6 +124,37 @@ html, body {
   font-size: 0.72rem;
   color: var(--text-dim);
 }
+
+/* Clear (×) button living inside the right edge of a field. */
+.input-clear {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.input-clear:hover { border-color: var(--accent); color: var(--accent); }
+.input-clear:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.18);
+}
+.input-clear[hidden] { display: none; }
 
 .locate-btn {
   flex: 0 0 auto;
