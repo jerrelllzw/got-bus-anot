@@ -1,16 +1,16 @@
 /* ============================================================================
-   Last Bus When Ah? — pure, side-effect-free logic.
+   Got Bus Anot? — pure, side-effect-free logic.
 
-   These functions touch no DOM and no globals, so they can be unit-tested in
-   Node (see tests/logic.test.js) and are reused by the browser front-end
-   (script.js). Loaded in the browser via a plain <script> tag (attaches to the
-   global object) and in Node via require() — no build step either way.
+   These functions touch no DOM and no globals, and are reused by the browser
+   front-end (script.js). Loaded in the browser via a plain <script> tag
+   (attaches to the global object), with a CommonJS export fallback — no build
+   step either way.
    ========================================================================= */
 
 (function (root, factory) {
   const api = factory();
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = api;              // Node / tests
+    module.exports = api;              // CommonJS (Node)
   } else {
     Object.assign(root, api);          // browser global (window/self)
   }
@@ -21,6 +21,15 @@
   function formatHHmm(hhmm) {
     if (!hhmm || hhmm.length !== 4 || !/^\d{4}$/.test(hhmm)) return "—";
     return `${hhmm.slice(0, 2)}:${hhmm.slice(2)}`;
+  }
+
+  /**
+   * True for a valid "HHmm" in the small hours (hour < 4), i.e. a time that
+   * belongs to the next calendar day — the UI marks these with a "+1".
+   */
+  function isAfterMidnight(hhmm) {
+    if (!hhmm || !/^\d{4}$/.test(hhmm)) return false;
+    return parseInt(hhmm.slice(0, 2), 10) < 4;
   }
 
   /** Local calendar date as "YYYY-MM-DD" (not UTC — holidays are local dates). */
@@ -61,59 +70,12 @@
     return `${(m / 1000).toFixed(1)} km`;
   }
 
-  /**
-   * Build a Date for an "HHmm" time on the same calendar day as `ref`,
-   * accounting for after-midnight (00:00–03:59) last-bus times that belong to
-   * the small hours of the *next* day.
-   */
-  function scheduledDate(hhmm, ref) {
-    const h = parseInt(hhmm.slice(0, 2), 10);
-    const m = parseInt(hhmm.slice(2), 10);
-    const d = new Date(ref);
-    d.setHours(h, m, 0, 0);
-    // After-midnight service times: if the scheduled hour is in the small hours
-    // and it's currently late evening, the bus runs after today's midnight.
-    if (h < 4 && ref.getHours() >= 12) {
-      d.setDate(d.getDate() + 1);
-    }
-    return d;
-  }
-
-  /**
-   * Decide the live last-bus status for a scheduled "HHmm" time at `now`.
-   * Returns { text, cls } where cls is one of
-   * is-plenty | is-soon | is-late | is-ended. Pure — the caller renders it.
-   */
-  function statusFor(lastStr, now) {
-    if (!lastStr || !/^\d{4}$/.test(lastStr)) {
-      return { text: "No scheduled last-bus time for today.", cls: "is-ended" };
-    }
-    const last = scheduledDate(lastStr, now);
-    const diffMin = Math.round((last - now) / 60000);
-    const hhmm = formatHHmm(lastStr);
-
-    if (diffMin > 45) {
-      return { text: `Plenty of time — last bus at ${hhmm}.`, cls: "is-plenty" };
-    }
-    if (diffMin >= 0) {
-      return { text: `Last bus due soon — ~${diffMin} min (${hhmm}).`, cls: "is-soon" };
-    }
-    if (diffMin >= -20) {
-      return {
-        text: `Past scheduled last bus by ${Math.abs(diffMin)} min — may still be running late.`,
-        cls: "is-late",
-      };
-    }
-    return { text: "Service has ended for today.", cls: "is-ended" };
-  }
-
   return {
     formatHHmm,
+    isAfterMidnight,
     localDateKey,
     dayType,
     haversine,
     formatDistance,
-    scheduledDate,
-    statusFor,
   };
 });

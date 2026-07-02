@@ -1,4 +1,4 @@
-# Last Bus When Ah? 🚏
+# Got Bus Anot? 🚏
 
 A tiny static web app that shows the **scheduled first & last bus time** for any
 Singapore bus service at any stop. No backend, no build step — just HTML/CSS/JS
@@ -32,9 +32,8 @@ scripts/fetch_data.py        # LTA -> sharded data/ (paginated, compacted)
 data/services.json           # index: { generated, services: [...] }  (loaded at boot)
 data/svc/<SERVICE>.json      # one shard per service (stops embedded), loaded on demand
 data/holidays.json           # dates that use the Sun/PH schedule (hand-maintained)
-logic.js                     # pure, unit-tested helpers (times, distance, status)
+logic.js                     # pure helpers (times, distance)
 index.html / style.css / script.js   # the static site
-tests/logic.test.js          # Node unit tests for logic.js
 ```
 
 ## Setup
@@ -91,19 +90,16 @@ That's it — the weekly Action keeps the schedule data current.
 
 ## Using the app
 
-1. Enter a **bus service number** (e.g. `196`).
-2. The route's stops appear as **two lists — one per travel direction** (each
-   labelled by its terminal), so you can scan the side heading the way you
-   want and **tap a stop** for its times. Tap **📍 Near me** to sort each list
-   by distance from you.
+1. Enter a **bus service number** (e.g. `196`). Services with letter suffixes
+   (`196A`, `NR7`) work too.
+2. The route's stops show **one direction at a time**; a **direction toggle**
+   (labelled by each terminal) flips between the two travel directions. **Tap a
+   stop** for its times. Use the **filter box** to narrow long routes by stop
+   name, or tap the **location button** to sort the list by distance from you
+   (granting location once makes later visits sort automatically).
 3. Read the **first/last** times for Weekday / Saturday / Sun-PH (today's row
-   is highlighted). If the stop is served in **both directions**, a switcher
-   (labelled by each direction's terminal) lets you flip between them. There's
-   also a live status line for the last bus:
-   - *Plenty of time* — last bus is >45 min away
-   - *Due soon* — within 45 min, with a rough countdown
-   - *Past scheduled* — just past the time, may still be running late
-   - *Service has ended for today*
+   is highlighted; after-midnight times are tagged **+1**), for the direction
+   you picked in the toggle.
 
 ## Local preview
 
@@ -113,15 +109,6 @@ Because the page fetches JSON from `data/`, open it via a local web server
 ```bash
 python -m http.server 8000
 # then visit http://localhost:8000
-```
-
-## Tests
-
-The date/time and distance logic lives in `logic.js` as pure functions, unit
-tested with Node's built-in runner (no dependencies to install):
-
-```bash
-npm test        # or: node --test
 ```
 
 ## Known limitations

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Scheduled first and last bus times for any Singapore bus service and stop." />
-  <title>Last Bus When Ah?</title>
+  <title>Got Bus Anot?</title>
 
   <!-- Emoji favicon via inline SVG — no separate icon file to ship. -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%8C%3C/text%3E%3C/svg%3E" />
@@ -21,11 +21,22 @@
 </head>
 <body>
   <main class="app">
-    <!-- Header: departure-board style title -->
-    <header class="header">
-      <h1 class="header__title">LAST&nbsp;BUS <span class="header__title-when">WHEN&nbsp;AH?</span></h1>
-      <p class="header__subtitle">Scheduled first &amp; last bus · Singapore</p>
+    <!-- Top bar: brand on the left, live Singapore clock on the right. -->
+    <header class="topbar">
+      <div class="topbar__brand">
+        <span class="topbar__dot" aria-hidden="true"></span>
+        <span class="topbar__name">GOT BUS ANOT?</span>
+      </div>
+      <div class="topbar__clock">
+        <span class="topbar__time" id="clock">--:--</span>
+        <span class="topbar__tz">SGT</span>
+      </div>
     </header>
+
+    <p class="tagline">
+      Scheduled <strong>first</strong> &amp; <strong>last</strong> bus times for any
+      Singapore service, at any stop.
+    </p>
 
     <!-- Search form -->
     <form class="controls" id="search-form" autocomplete="off">
@@ -37,7 +48,10 @@
             class="field__input"
             id="service-input"
             type="text"
-            inputmode="numeric"
+            inputmode="text"
+            autocapitalize="characters"
+            autocorrect="off"
+            spellcheck="false"
             placeholder="e.g. 196"
             aria-describedby="service-hint"
           />
@@ -53,22 +67,48 @@
         <p class="field__hint" id="service-hint">Enter a service number to load its stops.</p>
       </div>
 
-      <!-- Field 2: the route's stops, listed one column per direction. -->
+      <!-- Field 2: the route's stops, shown one direction at a time. -->
       <div class="field">
-        <div class="field__row field__row--between">
-          <span class="field__label">Bus stops</span>
+        <span class="field__label">Bus stops</span>
+        <p class="field__hint" id="stop-hint">Pick a service first.</p>
+        <!-- Filter + location, shown together once stops load. -->
+        <div class="field__row" id="stop-tools" hidden>
+          <!-- Narrows the list by stop name. -->
+          <div class="field__control" id="stop-filter-control">
+            <input
+              class="field__input field__input--filter"
+              id="stop-filter"
+              type="text"
+              placeholder="Filter stops by name…"
+              aria-label="Filter stops by name"
+              autocorrect="off"
+              spellcheck="false"
+            />
+            <button
+              class="input-clear"
+              id="stop-filter-clear"
+              type="button"
+              title="Clear filter"
+              aria-label="Clear filter"
+              hidden
+            >&times;</button>
+          </div>
           <button
-            class="locate-btn"
+            class="locate-btn locate-btn--icon"
             id="locate-btn"
             type="button"
-            title="Sort each list by distance from you"
+            title="Use my location"
+            aria-label="Use my location"
             disabled
           >
-            📍 Near me
+            <svg class="locate-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+              <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A9.01 9.01 0 0 0 13 3.06V1h-2v2.06A9.01 9.01 0 0 0 3.06 11H1v2h2.06A9.01 9.01 0 0 0 11 20.94V23h2v-2.06A9.01 9.01 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/>
+            </svg>
           </button>
         </div>
-        <p class="field__hint" id="stop-hint">Pick a service first.</p>
-        <!-- Two lists (one per direction), populated once a service loads. -->
+        <!-- Direction toggle — flips the single list between travel directions. -->
+        <div class="dir-toggle" id="stop-dir-toggle" hidden></div>
+        <!-- One list, showing the selected direction's stops. -->
         <div class="stop-lists" id="stop-lists"></div>
       </div>
     </form>
@@ -76,10 +116,17 @@
     <!-- Result panel: hidden until a stop is chosen -->
     <section class="result" id="result" hidden aria-live="polite">
       <div class="result__head">
-        <h2 class="result__stop" id="result-stop"></h2>
-        <p class="result__meta" id="result-meta"></p>
-        <!-- Direction switcher — shown only when a stop is served both ways -->
-        <div class="dir-tabs" id="dir-tabs" role="tablist" hidden></div>
+        <!-- Service badge + terminal. -->
+        <div class="result__service">
+          <span class="result__badge" id="result-badge"></span>
+          <span class="result__terminal" id="result-terminal"></span>
+        </div>
+        <!-- Stop name, road and stop code. -->
+        <div class="result__stopline">
+          <h2 class="result__stop" id="result-stop"></h2>
+          <span class="result__road" id="result-road"></span>
+          <span class="result__code" id="result-code"></span>
+        </div>
       </div>
 
       <table class="times">
@@ -94,9 +141,6 @@
           <!-- rows injected by script.js -->
         </tbody>
       </table>
-
-      <!-- Live countdown / status line -->
-      <p class="status" id="status" role="status"></p>
     </section>
 
     <!-- Empty / message state -->
@@ -104,19 +148,19 @@
 
     <!-- Footer: attribution + disclaimer + data freshness -->
     <footer class="footer">
+      <p class="footer__freshness">Schedule data updated <span id="data-timestamp">—</span> SGT.</p>
       <p class="footer__attribution">
         Contains information from
-        <a href="https://datamall.lta.gov.sg/" target="_blank" rel="noopener">LTA DataMall</a>
+        <a href="https://datamall.lta.gov.sg/" target="_blank" rel="noopener">LTA DataMall</a>,
         accessed under the
         <a href="https://datamall.lta.gov.sg/content/dam/datamall/datasets/Legal/Singapore%20Open%20Data%20Licence.pdf"
            target="_blank" rel="noopener">Singapore Open Data Licence v1.0</a>.
       </p>
       <p class="footer__disclaimer">
-        Not affiliated with or endorsed by LTA. Scheduled times only — no live
-        vehicle tracking. Public holidays use the Sun/PH schedule only for
-        dates in the app's holiday list.
+        Not affiliated with or endorsed by LTA. Scheduled times only — actual
+        buses may run early or late. Sun/PH column stands in for public holidays
+        only on dates in the app's holiday list.
       </p>
-      <p class="footer__freshness">Data updated: <span id="data-timestamp">—</span></p>
     </footer>
   </main>
 

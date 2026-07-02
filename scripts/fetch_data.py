@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fetch Singapore bus schedule data from LTA DataMall and write compact
-static per-service JSON shards for the Last Bus web app.
+static per-service JSON shards for the Got Bus Anot? web app.
 
 The LTA DataMall API is *not* CORS-enabled and the account key must stay
 secret, so we pull the data server-side (in CI) and commit a plain JSON file

@@ -1,5 +1,5 @@
 /* ============================================================================
-   Last Bus When Ah? — static front-end logic.
+   Got Bus Anot? — static front-end logic.
 
    Data is sharded (see scripts/fetch_data.py):
      * data/services.json      — tiny index of every service, loaded at boot.
@@ -8,7 +8,7 @@
      * data/holidays.json       — dates that use the Sun/PH schedule.
 
    So a visitor downloads a few KB for the one service they ask about instead
-   of a multi-megabyte blob. Pure helpers live in logic.js (unit-tested).
+   of a multi-megabyte blob. Pure helpers live in logic.js.
 
    Plain script-tag JS so it runs directly on GitHub Pages, no build step.
    ========================================================================= */
@@ -26,7 +26,10 @@ const R = {
 const S = { ROAD: 0, DESC: 1, LAT: 2, LNG: 3 };
 
 // Pure helpers from logic.js (attached to the global object by that script).
-const { formatHHmm, dayType, haversine, formatDistance, statusFor } = self;
+const { formatHHmm, isAfterMidnight, dayType, haversine, formatDistance } = self;
+
+// localStorage keys for the little bits of state we persist between visits.
+const LS = { GEO: "lbwa:geo" };
 
 // --- State -----------------------------------------------------------------
 let INDEX = null;            // { generated, services: Set<string> }
@@ -39,28 +42,34 @@ let terminalByDir = new Map();// direction -> terminal stop description
 let serviceToken = 0;        // guards against out-of-order async shard loads
 
 let userLocation = null;     // { lat, lng } once geolocation succeeds
+let stopFilter = "";         // text narrowing the direction lists
+let activeListDir = null;    // which direction the single stop list is showing
 
-let statusTimer = null;      // interval id for the live status line
-let statusRoute = null;      // route currently driving the status line
-let resultDirMap = null;     // direction -> route for the chosen stop
-let activeDir = null;        // which direction's times are on screen
+let activeCode = null;       // stop code currently shown in the result
+
 
 // --- DOM refs --------------------------------------------------------------
 const el = {
-  serviceInput: document.getElementById("service-input"),
-  serviceClear: document.getElementById("service-clear"),
-  stopHint:     document.getElementById("stop-hint"),
-  serviceHint:  document.getElementById("service-hint"),
-  locateBtn:    document.getElementById("locate-btn"),
-  stopLists:    document.getElementById("stop-lists"),
-  result:       document.getElementById("result"),
-  resultStop:   document.getElementById("result-stop"),
-  resultMeta:   document.getElementById("result-meta"),
-  dirTabs:      document.getElementById("dir-tabs"),
-  timesBody:    document.getElementById("times-body"),
-  status:       document.getElementById("status"),
-  message:      document.getElementById("message"),
-  timestamp:    document.getElementById("data-timestamp"),
+  clock:          document.getElementById("clock"),
+  serviceInput:   document.getElementById("service-input"),
+  serviceClear:   document.getElementById("service-clear"),
+  stopHint:       document.getElementById("stop-hint"),
+  serviceHint:    document.getElementById("service-hint"),
+  locateBtn:      document.getElementById("locate-btn"),
+  stopTools:       document.getElementById("stop-tools"),
+  stopFilter:      document.getElementById("stop-filter"),
+  stopFilterClear: document.getElementById("stop-filter-clear"),
+  stopDirToggle:  document.getElementById("stop-dir-toggle"),
+  stopLists:      document.getElementById("stop-lists"),
+  result:         document.getElementById("result"),
+  resultBadge:    document.getElementById("result-badge"),
+  resultTerminal: document.getElementById("result-terminal"),
+  resultStop:     document.getElementById("result-stop"),
+  resultRoad:     document.getElementById("result-road"),
+  resultCode:     document.getElementById("result-code"),
+  timesBody:      document.getElementById("times-body"),
+  message:        document.getElementById("message"),
+  timestamp:      document.getElementById("data-timestamp"),
 };
 
 // ===========================================================================
@@ -96,27 +105,45 @@ async function init() {
     console.warn("No holidays.json — public holidays won't be detected.", err);
   }
 
-  // Footer freshness stamp.
+  // Footer freshness stamp, shown in Singapore time to match the "SGT" label.
   if (INDEX.generated) {
     const d = new Date(INDEX.generated);
     el.timestamp.textContent = isNaN(d)
       ? INDEX.generated
-      : d.toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" });
+      : d.toLocaleString("en-SG", {
+          timeZone: "Asia/Singapore",
+          day: "numeric", month: "short", year: "numeric",
+          hour: "2-digit", minute: "2-digit", hour12: false,
+        });
   }
 
+  startClock();
   wireEvents();
+}
+
+/** Live Singapore-time clock in the top bar (HH:MM), ticking each second. */
+function startClock() {
+  const tick = () => {
+    el.clock.textContent = new Date().toLocaleTimeString("en-SG", {
+      timeZone: "Asia/Singapore",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+  };
+  tick();
+  setInterval(tick, 1000);
 }
 
 function wireEvents() {
   el.serviceInput.addEventListener("input", onServiceInput);
   el.locateBtn.addEventListener("click", onLocate);
   el.serviceClear.addEventListener("click", onServiceClear);
+  el.stopFilter.addEventListener("input", onStopFilter);
+  el.stopFilterClear.addEventListener("click", onStopFilterClear);
+  el.stopDirToggle.addEventListener("click", onStopDirToggle);
+  el.stopDirToggle.addEventListener("keydown", onStopDirToggleKey);
 
   // Prevent the form from actually submitting/reloading.
   document.getElementById("search-form").addEventListener("submit", (e) => e.preventDefault());
-
-  // Don't keep the countdown ticking (or leave a stale value) while hidden.
-  document.addEventListener("visibilitychange", onVisibilityChange);
 }
 
 // ===========================================================================
@@ -130,13 +157,15 @@ async function onServiceInput() {
 
   if (service === "") {
     currentService = null;
+    el.serviceHint.textContent = "Enter a service number to load its stops.";
     clearStopLists("Pick a service first.");
     return;
   }
 
   if (!INDEX.services.has(service)) {
     currentService = null;
-    clearStopLists(`No service "${service}" found.`);
+    el.serviceHint.textContent = `No service "${service}" found.`;
+    clearStopLists("Pick a service first.");
     return;
   }
 
@@ -161,13 +190,23 @@ async function onServiceInput() {
   currentRouteStops = shard.routes;
   computeTerminals();
 
-  el.locateBtn.disabled = false;
-  const dirs = terminalByDir.size;
-  const stopCount = new Set(currentRouteStops.map((r) => r[R.CODE])).size;
-  el.stopHint.textContent =
-    `${stopCount} stops` + (dirs > 1 ? ` in ${dirs} directions` : "") +
-    ` — tap one for its times.`;
+  // Fresh service — start its stop filter empty and reveal it, and let the
+  // list default to the first direction.
+  stopFilter = "";
+  el.stopFilter.value = "";
+  el.stopTools.hidden = false;
+  updateClear(el.stopFilter, el.stopFilterClear);
+  activeListDir = null;
+
+  el.serviceHint.textContent = "";
+  // The new list already honours a location fix from earlier this session.
+  setLocateState(userLocation ? "active" : "idle");
+  el.stopHint.textContent = "";
   renderStopLists();
+
+  // If the user already granted location on a past visit, sort by distance
+  // straight away (silently — no fresh permission prompt).
+  maybeAutoLocate();
 }
 
 /** Fetch (and cache) one service shard. Cache-busted by the dataset version. */
@@ -204,7 +243,30 @@ function clearStopLists(hint) {
   currentRouteStops = [];
   el.stopLists.innerHTML = "";
   el.locateBtn.disabled = true;
+  el.stopTools.hidden = true;
+  el.stopFilter.value = "";
+  el.stopFilterClear.hidden = true;
+  stopFilter = "";
+  el.stopDirToggle.hidden = true;
+  el.stopDirToggle.innerHTML = "";
+  activeListDir = null;
   el.stopHint.textContent = hint;
+}
+
+/** Narrow the list as the user types a stop name. */
+function onStopFilter() {
+  stopFilter = el.stopFilter.value.trim().toLowerCase();
+  updateClear(el.stopFilter, el.stopFilterClear);
+  renderStopLists();
+}
+
+/** Clear the stop filter and restore the full list. */
+function onStopFilterClear() {
+  el.stopFilter.value = "";
+  stopFilter = "";
+  updateClear(el.stopFilter, el.stopFilterClear);
+  renderStopLists();
+  el.stopFilter.focus();
 }
 
 // ===========================================================================
@@ -243,51 +305,158 @@ function buildDirectionGroups() {
       if (!seen.has(code)) seen.set(code, r);
     }
 
-    const candidates = [...seen.values()].map(makeCandidate);
+    let candidates = [...seen.values()].map(makeCandidate);
+    if (stopFilter) candidates = candidates.filter(matchesFilter);
     if (userLocation) {
       candidates.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     } else {
       candidates.sort((a, b) => a.route[R.SEQ] - b.route[R.SEQ]);
     }
 
-    if (candidates.length) groups.push({ dir, label: directionLabel(dir), candidates });
+    // Keep every direction (even when a filter empties it) so the toggle is stable.
+    groups.push({ dir, label: directionLabel(dir), candidates });
   }
 
   return groups;
 }
 
-/** Render the whole route as one tappable list per direction. */
+/** Does a stop candidate match the current filter text (name / road / code)? */
+function matchesFilter(c) {
+  const hay = `${c.desc} ${c.road} ${c.code}`.toLowerCase();
+  return hay.includes(stopFilter);
+}
+
+/**
+ * Render one tappable list at a time, with a direction toggle above it. The
+ * toggle's DOM is kept stable across renders so its active-segment "thumb" can
+ * slide between directions; the list below shows the active direction's stops.
+ */
 function renderStopLists() {
   const groups = buildDirectionGroups();
   if (groups.length === 0) {
+    hideDirToggle();
     el.stopLists.innerHTML = "";
     return;
   }
 
-  let html = "";
-  for (const g of groups) {
-    let items = "";
-    for (const c of g.candidates) {
-      const distTag = c.distance != null
-        ? `<span class="stop-list__dist">${formatDistance(c.distance)}</span>`
-        : "";
-      const name = escapeHtml(c.desc || c.road || `Stop ${c.code}`);
-      const sub = escapeHtml(`${c.road} · ${c.code}`);
-      items +=
-        `<li class="stop-list__item" role="button" tabindex="0" ` +
-            `data-code="${c.code}" data-dir="${c.dir}">` +
-          `<span><span class="stop-list__name">${name}</span>` +
-          `<span class="stop-list__sub">${sub}</span></span>` +
-          distTag +
-        `</li>`;
-    }
-    html +=
-      `<section class="stop-list">` +
-        `<h3 class="stop-list__head">${escapeHtml(g.label)} · ${g.candidates.length} stops</h3>` +
-        `<ul class="stop-list__items">${items}</ul>` +
-      `</section>`;
+  // Keep the chosen direction if it's still around; otherwise default to first.
+  if (activeListDir == null || !groups.some((g) => g.dir === activeListDir)) {
+    activeListDir = groups[0].dir;
   }
-  el.stopLists.innerHTML = html;
+  const active = groups.find((g) => g.dir === activeListDir);
+
+  renderDirToggle(groups);       // (re)build only when the direction set changes
+  updateDirToggleActive(groups); // slide the thumb + set aria-selected
+  renderStopListBody(active);
+}
+
+function hideDirToggle() {
+  el.stopDirToggle.hidden = true;
+  el.stopDirToggle.innerHTML = "";
+  el.stopDirToggle.dataset.sig = "";
+  el.stopDirToggle.classList.remove("dir-toggle--static");
+  el.stopDirToggle.removeAttribute("role");
+  el.stopDirToggle.removeAttribute("tabindex");
+  el.stopDirToggle.removeAttribute("aria-label");
+}
+
+/**
+ * Build the toggle once per direction set (stable DOM = animatable). With two+
+ * directions the whole control is one button (click flips direction); a single
+ * direction (loop service) renders the same look but static — it doubles as the
+ * list header.
+ */
+function renderDirToggle(groups) {
+  if (groups.length === 0) { hideDirToggle(); return; }
+  const sig = groups.map((g) => g.dir).join(",");
+  if (el.stopDirToggle.dataset.sig === sig && !el.stopDirToggle.hidden) return;
+
+  const interactive = groups.length > 1;
+  el.stopDirToggle.dataset.sig = sig;
+  el.stopDirToggle.style.setProperty("--n", groups.length);
+  el.stopDirToggle.classList.toggle("dir-toggle--static", !interactive);
+  if (interactive) {
+    el.stopDirToggle.setAttribute("role", "button");
+    el.stopDirToggle.setAttribute("tabindex", "0");
+  } else {
+    el.stopDirToggle.removeAttribute("role");
+    el.stopDirToggle.removeAttribute("tabindex");
+    el.stopDirToggle.removeAttribute("aria-label");
+  }
+  el.stopDirToggle.innerHTML = dirToggleMarkup(groups.map((g) => ({ dir: g.dir, label: g.label })));
+  el.stopDirToggle.hidden = false;
+}
+
+/** Shared markup for a segmented toggle: sliding thumb + one label per segment. */
+function dirToggleMarkup(segments) {
+  return (
+    `<span class="dir-toggle__thumb" aria-hidden="true"><span class="dir-toggle__fill"></span></span>` +
+    segments
+      .map((s) =>
+        `<span class="dir-toggle__seg" data-dir="${s.dir}">` +
+          `<span class="dir-toggle__seg-label">${escapeHtml(s.label)}</span>` +
+        `</span>`
+      )
+      .join("")
+  );
+}
+
+/** Slide the thumb to `idx` within a toggle and mark that segment selected. */
+function moveThumb(toggle, idx) {
+  toggle.querySelectorAll(".dir-toggle__seg").forEach((seg, i) => {
+    seg.setAttribute("aria-selected", String(i === idx));
+  });
+  const thumb = toggle.querySelector(".dir-toggle__thumb");
+  if (thumb && idx >= 0) thumb.style.transform = `translateX(${idx * 100}%)`;
+}
+
+/** Play the "flow" stretch as the thumb travels from oldIdx to newIdx. */
+function flowThumb(toggle, oldIdx, newIdx) {
+  const thumb = toggle.querySelector(".dir-toggle__thumb");
+  const fill = thumb && thumb.querySelector(".dir-toggle__fill");
+  if (!fill) return;
+  fill.style.transformOrigin = newIdx > oldIdx ? "left center" : "right center";
+  thumb.classList.remove("is-flowing");
+  void thumb.offsetWidth; // restart the animation
+  thumb.classList.add("is-flowing");
+}
+
+/** Point the thumb at the active direction and mark the selected segment. */
+function updateDirToggleActive(groups) {
+  if (groups.length === 0) return;
+  const idx = groups.findIndex((g) => g.dir === activeListDir);
+  moveThumb(el.stopDirToggle, idx);
+  if (groups.length > 1 && groups[idx]) {
+    el.stopDirToggle.setAttribute("aria-label", `Direction ${groups[idx].label} — tap to switch`);
+  }
+}
+
+function renderStopListBody(active) {
+  // The active direction's stops (or an empty-filter message).
+  if (active.candidates.length === 0) {
+    el.stopLists.innerHTML = stopFilter
+      ? `<p class="stop-lists__empty">No stops match “${escapeHtml(stopFilter)}”.</p>`
+      : "";
+    return;
+  }
+
+  let items = "";
+  for (const c of active.candidates) {
+    const distTag = c.distance != null
+      ? `<span class="stop-list__dist">${formatDistance(c.distance)}</span>`
+      : "";
+    const name = escapeHtml(c.desc || c.road || `Stop ${c.code}`);
+    const sub = escapeHtml(`${c.road} · ${c.code}`);
+    items +=
+      `<li class="stop-list__item" role="button" tabindex="0" ` +
+          `data-code="${c.code}" data-dir="${c.dir}">` +
+        `<span><span class="stop-list__name">${name}</span>` +
+        `<span class="stop-list__sub">${sub}</span></span>` +
+        distTag +
+      `</li>`;
+  }
+  el.stopLists.innerHTML =
+    `<section class="stop-list"><ul class="stop-list__items">${items}</ul></section>`;
 
   // Tap or keyboard-activate a stop — carry the direction it was listed under.
   el.stopLists.querySelectorAll(".stop-list__item").forEach((li) => {
@@ -297,9 +466,34 @@ function renderStopLists() {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); }
     });
   });
+
+  // Re-apply the selection highlight (the list was just rebuilt).
+  if (activeCode != null) markSelectedStop(activeCode);
 }
 
-/** Highlight the chosen stop across both direction lists. */
+/** The whole control is one button: flip to the next direction (with a flow). */
+function onStopDirToggle() {
+  const dirs = [...el.stopDirToggle.querySelectorAll(".dir-toggle__seg")]
+    .map((seg) => Number(seg.dataset.dir));
+  if (dirs.length < 2) return;
+
+  const oldIdx = dirs.indexOf(activeListDir);
+  const newIdx = (oldIdx + 1) % dirs.length;
+  activeListDir = dirs[newIdx];
+  resetResult(); // switching direction clears the current selection + result card
+  renderStopLists();
+
+  flowThumb(el.stopDirToggle, oldIdx, newIdx);
+  const list = el.stopLists.querySelector(".stop-list, .stop-lists__empty");
+  if (list) list.classList.add("stop-list--enter");
+}
+
+/** Keyboard activation for the toggle button (Enter / Space). */
+function onStopDirToggleKey(e) {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onStopDirToggle(); }
+}
+
+/** Highlight the chosen stop in the list (if its direction is showing). */
 function markSelectedStop(code) {
   el.stopLists.querySelectorAll(".stop-list__item").forEach((li) => {
     li.classList.toggle("is-selected", li.dataset.code === code);
@@ -327,20 +521,18 @@ function onLocate() {
     el.stopHint.textContent = "Geolocation isn't supported by this browser.";
     return;
   }
-  el.locateBtn.disabled = true;
-  el.locateBtn.textContent = "Locating…";
+  setLocateState("locating");
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      el.locateBtn.textContent = "📍 Nearest";
-      el.locateBtn.disabled = false;
-      el.stopHint.textContent = "Each list now starts with the stops nearest you.";
+      saveJSON(LS.GEO, true); // remember consent so future visits auto-sort
+      setLocateState("active");
+      el.stopHint.textContent = "";
       renderStopLists();
     },
     (err) => {
-      el.locateBtn.textContent = "📍 Near me";
-      el.locateBtn.disabled = false;
+      setLocateState("idle");
       el.stopHint.textContent =
         err.code === err.PERMISSION_DENIED
           ? "Location permission denied — stops stay in route order."
@@ -350,76 +542,83 @@ function onLocate() {
   );
 }
 
+/** Reflect the location button's state without disturbing its icon. */
+function setLocateState(state) {
+  el.locateBtn.classList.toggle("is-locating", state === "locating");
+  el.locateBtn.classList.toggle("is-active", state === "active");
+  // Once the list is sorted by location there's nothing more to do, so disable it.
+  el.locateBtn.disabled = state === "locating" || state === "active";
+  el.locateBtn.title =
+    state === "active"  ? "List sorted by your location" :
+    state === "locating" ? "Locating…" :
+    "Use my location";
+  el.locateBtn.setAttribute("aria-label", el.locateBtn.title);
+}
+
+/**
+ * If the user granted location on a past visit and the browser still reports
+ * that permission as granted, fetch it silently so the lists sort by distance
+ * without another button tap. Never prompts on its own — that stays opt-in.
+ */
+function maybeAutoLocate() {
+  if (userLocation) return;                          // already have it this session
+  if (!navigator.geolocation) return;
+  if (loadJSON(LS.GEO, false) !== true) return;      // never opted in before
+  if (!(navigator.permissions && navigator.permissions.query)) return;
+
+  navigator.permissions.query({ name: "geolocation" })
+    .then((perm) => {
+      if (perm.state !== "granted") return;
+      setLocateState("locating");
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setLocateState("active");
+          renderStopLists();
+        },
+        () => {
+          setLocateState("idle");
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    })
+    .catch(() => {});
+}
+
 // ===========================================================================
-// Step 3 — result table + status (per direction)
+// Step 3 — result table (per direction)
 // ===========================================================================
 
 function selectStop(code, preferredDir) {
-  // A stop may be served in both directions; the first/last times differ, so
-  // group by direction and let the user switch between them.
-  resultDirMap = new Map();
+  // Show the stop for the direction it was tapped under (the user already chose
+  // a direction via the toggle). Terminals appear in both directions with
+  // different times, so match the tapped direction; otherwise take whichever
+  // direction serves this stop.
+  let route = null;
   for (const r of currentRouteStops) {
-    if (r[R.CODE] === code && !resultDirMap.has(r[R.DIRECTION])) {
-      resultDirMap.set(r[R.DIRECTION], r);
-    }
+    if (r[R.CODE] !== code) continue;
+    if (r[R.DIRECTION] === preferredDir) { route = r; break; }
+    if (!route) route = r;
   }
-  if (resultDirMap.size === 0) return;
+  if (!route) return;
 
+  activeCode = code;
   const stop = currentService.stops[code];
   const stopName = stop ? (stop[S.DESC] || stop[S.ROAD]) : `Stop ${code}`;
   el.resultStop.textContent = stopName;
+  el.resultRoad.textContent = stop ? stop[S.ROAD] : "";
+  el.resultCode.textContent = code;
   markSelectedStop(code);
 
-  renderDirTabs(code);
-
-  // Open on the direction the stop was tapped under, if it serves this stop;
-  // otherwise fall back to the lowest-numbered direction.
-  const dirs = [...resultDirMap.keys()].sort((a, b) => a - b);
-  const startDir = resultDirMap.has(preferredDir) ? preferredDir : dirs[0];
-  showDirection(startDir, code);
+  const dir = route[R.DIRECTION];
+  el.resultBadge.textContent = currentServiceId();
+  const terminal = terminalByDir.get(dir);
+  el.resultTerminal.textContent = terminal ? `→ ${terminal}` : directionLabel(dir);
+  renderTimes(route);
 
   el.result.hidden = false;
   el.message.hidden = true;
   el.result.scrollIntoView({ behavior: "smooth", block: "nearest" });
-}
-
-/** Build the direction switcher (hidden when a stop is single-direction). */
-function renderDirTabs(code) {
-  const dirs = [...resultDirMap.keys()].sort((a, b) => a - b);
-  if (dirs.length < 2) {
-    el.dirTabs.hidden = true;
-    el.dirTabs.innerHTML = "";
-    return;
-  }
-  el.dirTabs.innerHTML = dirs
-    .map((dir) =>
-      `<button type="button" class="dir-tab" role="tab" data-dir="${dir}">` +
-        escapeHtml(directionLabel(dir)) +
-      `</button>`
-    )
-    .join("");
-  el.dirTabs.querySelectorAll(".dir-tab").forEach((btn) => {
-    btn.addEventListener("click", () => showDirection(Number(btn.dataset.dir), code));
-  });
-  el.dirTabs.hidden = false;
-}
-
-function showDirection(dir, code) {
-  const route = resultDirMap.get(dir);
-  if (!route) return;
-  activeDir = dir;
-
-  const stop = currentService.stops[code];
-  const service = el.serviceInput.value.trim().toUpperCase();
-  el.resultMeta.textContent =
-    `Service ${service} · ${directionLabel(dir)} · ${stop ? stop[S.ROAD] : ""} · Stop ${code}`;
-
-  el.dirTabs.querySelectorAll(".dir-tab").forEach((btn) => {
-    btn.setAttribute("aria-selected", Number(btn.dataset.dir) === dir);
-  });
-
-  renderTimes(route);
-  startStatus(route);
 }
 
 function renderTimes(route) {
@@ -433,52 +632,52 @@ function renderTimes(route) {
   el.timesBody.innerHTML = rows
     .map((row) => {
       const cls = row.key === today ? ' class="is-today"' : "";
+      const badge = row.key === today ? ` <span class="today-badge">Today</span>` : "";
       return (
         `<tr${cls}>` +
-          `<td>${row.label}</td>` +
-          `<td>${formatHHmm(row.first)}</td>` +
-          `<td>${formatHHmm(row.last)}</td>` +
+          `<td>${row.label}${badge}</td>` +
+          `<td>${renderTime(row.first)}</td>` +
+          `<td>${renderTime(row.last)}</td>` +
         `</tr>`
       );
     })
     .join("");
 }
 
+/** A schedule time with an amber colon and a "+1" tag for after-midnight runs. */
+function renderTime(hhmm) {
+  const t = formatHHmm(hhmm);
+  if (t === "—") return t;
+  const [h, m] = t.split(":");
+  const next = isAfterMidnight(hhmm) ? `<span class="t-next">+1</span>` : "";
+  return `${h}<span class="t-colon">:</span>${m}${next}`;
+}
+
 // ===========================================================================
-// Live status line for the last bus
+// Persistence
 // ===========================================================================
 
-function startStatus(route) {
-  statusRoute = route;
-  if (statusTimer) clearInterval(statusTimer);
-  updateStatus();
-  // Refresh every 30s so the countdown stays live without being busy.
-  statusTimer = setInterval(updateStatus, 30000);
+/** The service currently loaded (canonical casing from the shard). */
+function currentServiceId() {
+  return currentService ? currentService.service : el.serviceInput.value.trim().toUpperCase();
 }
 
-function stopStatus() {
-  if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+// --- Tiny localStorage wrappers (never throw; storage may be unavailable) ---
+
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw == null ? fallback : JSON.parse(raw);
+  } catch (_) {
+    return fallback;
+  }
 }
 
-function updateStatus() {
-  if (!statusRoute) return;
-  const today = dayType(new Date(), HOLIDAYS);
-  const lastStr =
-    today === "SUN" ? statusRoute[R.SUN_LAST] :
-    today === "SAT" ? statusRoute[R.SAT_LAST] :
-    statusRoute[R.WD_LAST];
-
-  const { text, cls } = statusFor(lastStr, new Date());
-  el.status.textContent = text;
-  el.status.className = "status " + cls;
-}
-
-/** Pause the ticking countdown while the tab is hidden; refresh on return. */
-function onVisibilityChange() {
-  if (document.hidden) {
-    stopStatus();
-  } else if (statusRoute && !el.result.hidden) {
-    startStatus(statusRoute);
+function saveJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (_) {
+    /* private mode / quota — non-fatal, the app still works this session. */
   }
 }
 
@@ -488,10 +687,7 @@ function onVisibilityChange() {
 
 function resetResult() {
   el.result.hidden = true;
-  stopStatus();
-  statusRoute = null;
-  resultDirMap = null;
-  activeDir = null;
+  activeCode = null;
 }
 
 function showMessage(text) {

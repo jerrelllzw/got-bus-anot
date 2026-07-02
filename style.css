@@ -1,5 +1,5 @@
 /* ============================================================================
-   Last Bus When Ah? — transit departure-board aesthetic.
+   Got Bus Anot? — transit departure-board aesthetic.
    Near-black background, single amber/LED accent, monospace for data.
    Mobile-first, single-screen, restrained. Respects reduced motion.
    ========================================================================= */
@@ -46,33 +46,66 @@ html, body {
   gap: 1.5rem;
 }
 
-/* --- Header --------------------------------------------------------------- */
+/* --- Top bar --------------------------------------------------------------- */
 
-.header { text-align: center; }
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
 
-.header__title {
+.topbar__brand { display: flex; align-items: center; gap: 0.55rem; }
+
+/* Blinking amber "live" dot — hard toggle between lit and unlit (never gone). */
+.topbar__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(255, 176, 0, 0.7);
+  animation: blink 3s step-end infinite;
+}
+
+@keyframes blink {
+  50% { background: var(--accent-dim); box-shadow: none; }
+}
+
+.topbar__name {
   font-family: var(--font-sans);
   font-weight: 700;
-  font-size: clamp(1.75rem, 7vw, 2.6rem);
-  letter-spacing: 0.1em;
-  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.16em;
+  color: var(--text);
+}
+
+.topbar__clock { display: flex; align-items: baseline; gap: 0.4rem; }
+
+.topbar__time {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.06em;
   color: var(--accent);
-  text-shadow: 0 0 18px rgba(255, 176, 0, 0.35);
+  font-variant-numeric: tabular-nums;
 }
 
-/* "WHEN AH?" gets a hollow/outlined treatment so the wordmark reads as two beats. */
-.header__title-when {
-  color: transparent;
-  -webkit-text-stroke: 1.5px var(--accent);
-  text-shadow: none;
-}
-
-.header__subtitle {
-  margin: 0.35rem 0 0;
+.topbar__tz {
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
   color: var(--text-dim);
-  font-size: 0.8rem;
-  letter-spacing: 0.03em;
 }
+
+/* --- Tagline --------------------------------------------------------------- */
+
+.tagline {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.tagline strong { color: var(--text); font-weight: 700; }
 
 /* --- Controls / form ------------------------------------------------------ */
 
@@ -80,6 +113,10 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.1rem;
 }
 
 .field { position: relative; display: flex; flex-direction: column; gap: 0.4rem; }
@@ -100,7 +137,7 @@ html, body {
 .field__input {
   flex: 1;
   min-width: 0;
-  background: var(--panel);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
@@ -125,8 +162,16 @@ html, body {
   font-size: 0.72rem;
   color: var(--text-dim);
 }
+.field__hint:empty { display: none; }
 
-/* Clear (×) button living inside the right edge of a field. */
+/* Stop-filter box: same field styling, a touch smaller (right pad leaves room for ×). */
+.field__input--filter {
+  font-size: 0.95rem;
+  padding: 0.6rem 2.4rem 0.6rem 0.9rem;
+}
+#stop-tools[hidden] { display: none; }
+
+/* Clear (×) button living inside the right edge of a field — plain glyph. */
 .input-clear {
   position: absolute;
   top: 50%;
@@ -135,25 +180,25 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 1.9rem;
+  height: 1.9rem;
   padding: 0;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  background: none;
+  border: none;
   color: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 1.1rem;
+  font-size: 1.7rem;
   line-height: 1;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease;
 }
 
-.input-clear:hover { border-color: var(--accent); color: var(--accent); }
+.input-clear:hover { color: var(--accent); }
 .input-clear:focus-visible {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.18);
+  color: var(--accent);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(255, 176, 0, 0.35);
 }
 .input-clear[hidden] { display: none; }
 
@@ -179,7 +224,126 @@ html, body {
 }
 .locate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* --- Stop lists (one column per direction) -------------------------------- */
+/* Icon-only variant: a button holding the "my location" crosshair. */
+.locate-btn--icon {
+  padding: 0 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+.locate-icon { width: 1.3rem; height: 1.3rem; display: block; }
+
+/* Lit when the list is sorted by distance. */
+.locate-btn.is-active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: rgba(255, 176, 0, 0.08);
+}
+
+/* Spin the crosshair while acquiring a fix. */
+.locate-btn.is-locating .locate-icon { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- Stop list + direction toggle ----------------------------------------- */
+
+/* Shared segmented control: a bordered track with a sliding amber "thumb" that
+   stretches toward the other side as it moves (liquid flow). overflow:hidden so
+   the stretch is clipped to the track, reading as the yellow flowing across.
+   Used for the stop-list direction toggle, the result switcher, and (as a
+   single static segment) the loop-service header. */
+.dir-toggle {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  gap: 0;
+  padding: 0.25rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.dir-toggle[hidden] { display: none; }
+.dir-toggle:not(.dir-toggle--static):hover { border-color: var(--accent-dim); }
+.dir-toggle:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.18);
+}
+/* Nudge the inactive label brighter on hover to hint it's tappable. */
+.dir-toggle:not(.dir-toggle--static):hover .dir-toggle__seg:not([aria-selected="true"]) {
+  color: var(--text);
+}
+/* A single-direction (loop) route: same shape, but a dim outlined fill and
+   amber text (a header, not a solid tappable button). */
+.dir-toggle--static { cursor: default; }
+.dir-toggle--static .dir-toggle__fill {
+  background: rgba(255, 176, 0, 0.08);
+  border: 1px solid var(--accent-dim);
+  box-shadow: none;
+}
+.dir-toggle--static .dir-toggle__seg[aria-selected="true"] { color: var(--accent); }
+
+#stop-dir-toggle { margin-bottom: 0.7rem; }
+
+/* Positioned wrapper that slides between segments. */
+.dir-toggle__thumb {
+  position: absolute;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  left: 0.25rem;
+  width: calc((100% - 0.5rem) / var(--n, 2));
+  pointer-events: none;
+  transition: transform 0.32s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+/* The visible amber; scales horizontally mid-slide to "flow". */
+.dir-toggle__fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: calc(var(--radius) - 4px);
+  box-shadow: 0 0 12px rgba(255, 176, 0, 0.3);
+}
+.dir-toggle__thumb.is-flowing .dir-toggle__fill {
+  animation: thumbFlow 0.34s ease;
+}
+@keyframes thumbFlow {
+  0%, 100% { transform: scaleX(1); }
+  45%      { transform: scaleX(1.6); }
+}
+
+.dir-toggle__seg {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 0.6rem;
+  transition: color 0.2s ease;
+}
+.dir-toggle__seg[aria-selected="true"] {
+  color: var(--bg);
+  font-weight: 700;
+}
+
+/* Terminal name truncates rather than wrapping. */
+.dir-toggle__seg-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .stop-lists {
   display: flex;
@@ -187,35 +351,40 @@ html, body {
   gap: 1rem;
 }
 
+/* Brief fade/rise when the list changes direction. */
+.stop-list--enter { animation: listEnter 0.24s ease; }
+@keyframes listEnter {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
 .stop-list {
-  background: var(--panel);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
 }
 
-/* Direction header (labelled by that direction's terminal). */
-.stop-list__head {
-  margin: 0;
-  padding: 0.5rem 0.9rem;
-  background: var(--panel-2);
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--accent);
-}
-
-/* The stops scroll within each direction so both lists stay on screen. */
+/* The stops scroll within the list so the panel stays a manageable height. */
 .stop-list__items {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 16rem;
+  max-height: 22rem;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;                       /* Firefox */
+  scrollbar-color: var(--border) transparent;
 }
+
+/* Slim, themed scrollbar (WebKit/Blink). */
+.stop-list__items::-webkit-scrollbar { width: 10px; }
+.stop-list__items::-webkit-scrollbar-track { background: transparent; }
+.stop-list__items::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 3px solid var(--bg);                 /* insets the thumb so it reads as a thin pill */
+}
+.stop-list__items::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
 
 .stop-list__item {
   padding: 0.6rem 0.9rem;
@@ -257,6 +426,15 @@ html, body {
   padding: 0.05rem 0.5rem;
 }
 
+/* Shown when the filter matches no stops. */
+.stop-lists__empty {
+  margin: 0;
+  padding: 0.9rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
 /* --- Result panel --------------------------------------------------------- */
 
 .result {
@@ -268,51 +446,64 @@ html, body {
 
 .result__head { margin-bottom: 0.9rem; }
 
+/* Service badge + terminal, divided from the stop line below. */
+.result__service {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.85rem;
+  margin-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.result__badge {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 1.35rem;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 8px;
+  padding: 0.15rem 0.7rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 16px rgba(255, 176, 0, 0.3);
+}
+
+.result__terminal {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.result__stopline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+}
+
 .result__stop {
   font-family: var(--font-sans);
-  font-size: 1.15rem;
+  font-size: 1.2rem;
+  font-weight: 700;
   margin: 0;
   color: var(--text);
 }
 
-.result__meta {
-  margin: 0.2rem 0 0;
-  font-size: 0.75rem;
+.result__road {
+  font-size: 0.85rem;
   color: var(--text-dim);
 }
 
-/* --- Direction switcher --------------------------------------------------- */
-
-.dir-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.7rem;
-}
-
-.dir-tab {
-  background: var(--panel-2);
+.result__code {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--text-dim);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  padding: 0.3rem 0.7rem;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
-
-.dir-tab:hover { border-color: var(--accent); }
-.dir-tab:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.18);
-}
-
-.dir-tab[aria-selected="true"] {
-  color: var(--accent);
-  border-color: var(--accent-dim);
-  background: rgba(255, 176, 0, 0.08);
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Times table ---------------------------------------------------------- */
@@ -326,7 +517,7 @@ html, body {
 .times th,
 .times td {
   text-align: left;
-  padding: 0.6rem 0.5rem;
+  padding: 0.85rem 0.5rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -336,35 +527,63 @@ html, body {
   letter-spacing: 0.12em;
   color: var(--text-dim);
   font-weight: 500;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
 }
 
-.times td { font-size: 1.05rem; }
-.times td:first-child { color: var(--text-dim); font-size: 0.9rem; }
+.times td {
+  font-size: 1.4rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.times td:first-child {
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
 
 .times tbody tr:last-child td { border-bottom: none; }
 
-/* Today's row is highlighted in the accent colour. */
+/* Amber colon for the departure-board look; digits keep the cell colour. */
+.t-colon { color: var(--accent); }
+
+/* Small dim "+1" marking an after-midnight (next-day) time. */
+.t-next {
+  font-size: 0.55em;
+  color: var(--text-dim);
+  vertical-align: super;
+  margin-left: 0.15rem;
+  font-weight: 400;
+}
+
+/* "TODAY" pill next to the current day's label. */
+.today-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* Today's row is highlighted in the accent colour, with a left marker bar. */
 .times tr.is-today td {
   color: var(--accent);
   background: rgba(255, 176, 0, 0.06);
 }
-.times tr.is-today td:first-child { color: var(--accent); font-weight: 700; }
-
-/* --- Status / countdown line ---------------------------------------------- */
-
-.status {
-  margin: 1rem 0 0;
-  padding: 0.7rem 0.85rem;
-  border-radius: var(--radius);
-  background: var(--panel-2);
-  border-left: 3px solid var(--accent);
-  font-size: 0.92rem;
+.times tr.is-today td:first-child {
+  color: var(--accent);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
-
-.status.is-soon    { border-left-color: var(--accent); color: var(--accent); }
-.status.is-late    { border-left-color: var(--danger); color: var(--danger); }
-.status.is-ended   { border-left-color: var(--text-dim); color: var(--text-dim); }
-.status.is-plenty  { border-left-color: var(--good); color: var(--good); }
+/* On the highlighted row the colon already matches — keep it amber. */
+.times tr.is-today .t-colon { color: var(--accent); }
 
 /* --- Message / empty state ------------------------------------------------ */
 
@@ -387,7 +606,7 @@ html, body {
 }
 
 .footer p { margin: 0 0 0.5rem; }
-.footer a { color: var(--text-dim); text-decoration: underline; }
+.footer a { color: var(--accent); text-decoration: underline; }
 .footer a:hover { color: var(--accent); }
 .footer__freshness { color: #55555c; }
 
