@@ -44,6 +44,11 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  /* Gentle settle on first paint. */
+  animation: appIn 0.4s ease both;
+}
+@keyframes appIn {
+  from { opacity: 0; transform: translateY(6px); }
 }
 
 /* --- Top bar --------------------------------------------------------------- */
@@ -170,6 +175,12 @@ html, body {
   padding: 0.6rem 2.4rem 0.6rem 0.9rem;
 }
 #stop-tools[hidden] { display: none; }
+/* Fade the filter + locate row in when a service's stops load (it goes from
+   display:none to shown, which restarts this animation). */
+#stop-tools:not([hidden]) { animation: toolsIn 0.3s ease both; }
+@keyframes toolsIn {
+  from { opacity: 0; transform: translateY(-4px); }
+}
 
 /* Clear (×) button living inside the right edge of a field — plain glyph. */
 .input-clear {
@@ -201,6 +212,13 @@ html, body {
   box-shadow: 0 0 0 2px rgba(255, 176, 0, 0.35);
 }
 .input-clear[hidden] { display: none; }
+.input-clear:active { transform: translateY(-50%) scale(0.85); }
+/* Pop in when the field gains text (keeps the -50% centring in every frame). */
+.input-clear:not([hidden]) { animation: clearIn 0.18s ease both; }
+@keyframes clearIn {
+  from { opacity: 0; transform: translateY(-50%) scale(0.6); }
+  to   { opacity: 1; transform: translateY(-50%) scale(1); }
+}
 
 .locate-btn {
   flex: 0 0 auto;
@@ -213,10 +231,11 @@ html, body {
   padding: 0 0.85rem;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
 }
 
 .locate-btn:hover:not(:disabled) { border-color: var(--accent); }
+.locate-btn:active:not(:disabled) { transform: scale(0.94); }
 .locate-btn:focus-visible {
   outline: none;
   border-color: var(--accent);
@@ -264,9 +283,12 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.1s ease;
 }
+.dir-toggle:not(.dir-toggle--static):active { transform: scale(0.99); }
 .dir-toggle[hidden] { display: none; }
+/* Fade the direction toggle in when it first appears for a service. */
+#stop-dir-toggle:not([hidden]) { animation: toolsIn 0.3s ease both; }
 .dir-toggle:not(.dir-toggle--static):hover { border-color: var(--accent-dim); }
 .dir-toggle:focus-visible {
   outline: none;
@@ -353,11 +375,34 @@ html, body {
   gap: 1rem;
 }
 
-/* Brief fade/rise when the list changes direction. */
-.stop-list--enter { animation: listEnter 0.24s ease; }
+/* Subtle fade/rise of the whole list box — masks the empty-box flash while the
+   rows stagger in on top of it. */
 @keyframes listEnter {
   from { opacity: 0; transform: translateY(4px); }
 }
+
+/* Staggered entrance for the stop list, so it builds up instead of snapping in.
+   A fresh service rises up; a direction toggle slides the rows in horizontally
+   from the side the thumb travels toward. --enter-x/-y set the start offset and
+   --i (both set per item) offsets each row's start. */
+.stop-list--reveal { animation: listEnter 0.28s ease; }
+.stop-list--reveal .stop-list__item {
+  --enter-x: 0px;
+  --enter-y: 9px;
+  opacity: 0;
+  animation: stopItemIn 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation-delay: calc(var(--i, 0) * 32ms);
+}
+.stop-list--reveal-fwd  .stop-list__item { --enter-x: 24px;  --enter-y: 0px; }
+.stop-list--reveal-back .stop-list__item { --enter-x: -24px; --enter-y: 0px; }
+@keyframes stopItemIn {
+  from { opacity: 0; transform: translate(var(--enter-x), var(--enter-y)); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Light whole-list fade as the filter narrows the matches — no per-item stagger
+   so it stays smooth when it re-runs on every keystroke. */
+.stop-list--filter { animation: listEnter 0.16s ease; }
 
 .stop-list {
   background: var(--bg);
@@ -396,10 +441,13 @@ html, body {
   justify-content: space-between;
   align-items: baseline;
   gap: 0.75rem;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 
 .stop-list__item:last-child { border-bottom: none; }
 .stop-list__item:hover { background: var(--panel-2); }
+/* Press feedback — the row dips slightly when tapped. */
+.stop-list__item:active { transform: scale(0.99); }
 
 .stop-list__item.is-selected {
   background: rgba(255, 176, 0, 0.08);
@@ -444,6 +492,22 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.1rem 1.1rem 1.25rem;
+}
+
+/* Fade/rise the card in on each pick, with the schedule rows rising in after
+   it (--i, set per row, staggers them). */
+.result--enter { animation: resultIn 0.28s ease; }
+@keyframes resultIn {
+  from { opacity: 0; transform: translateY(8px); }
+}
+.result--enter .times tbody tr {
+  opacity: 0;
+  animation: rowIn 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  animation-delay: calc(0.12s + var(--i, 0) * 70ms);
+}
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
 }
 
 .result__head { margin-bottom: 0.9rem; }
@@ -616,4 +680,8 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
+  /* The staggered stops/rows start hidden and rely on their animation to
+     reveal; without it they must show immediately. */
+  .stop-list--reveal .stop-list__item,
+  .result--enter .times tbody tr { opacity: 1; }
 }

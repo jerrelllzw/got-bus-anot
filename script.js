@@ -45,6 +45,9 @@ let userLocation = null;     // { lat, lng } once geolocation succeeds
 let sortByDistance = false;  // whether the lists are currently distance-sorted
 let stopFilter = "";         // text narrowing the direction lists
 let activeListDir = null;    // which direction the single stop list is showing
+let revealStops = false;     // play the staggered entrance on the next render (fresh service)
+let revealDir = 0;           // entrance slide: 0 rise up (fresh service), ±1 horizontal (direction toggle)
+let revealFilter = false;    // play the light per-keystroke fade on the next render (filter typing)
 
 let activeCode = null;       // stop code currently shown in the result
 
@@ -203,6 +206,7 @@ async function onServiceInput() {
   // The new list already honours a sort choice from earlier this session.
   setLocateState(sortByDistance ? "active" : "idle");
   el.stopHint.textContent = "";
+  revealStops = true; // fresh service — let its stops animate in
   renderStopLists();
 
   // If the user already granted location on a past visit, sort by distance
@@ -258,6 +262,7 @@ function clearStopLists(hint) {
 function onStopFilter() {
   stopFilter = el.stopFilter.value.trim().toLowerCase();
   updateClear(el.stopFilter, el.stopFilterClear);
+  revealFilter = true; // light fade as the matches narrow
   renderStopLists();
 }
 
@@ -266,6 +271,7 @@ function onStopFilterClear() {
   el.stopFilter.value = "";
   stopFilter = "";
   updateClear(el.stopFilter, el.stopFilterClear);
+  revealStops = true; // restoring the full list — rise it back in
   renderStopLists();
   el.stopFilter.focus();
 }
@@ -333,6 +339,13 @@ function matchesFilter(c) {
  * slide between directions; the list below shows the active direction's stops.
  */
 function renderStopLists() {
+  const reveal = revealStops; // one-shot: consume it so filtering/sorting don't re-trigger
+  const revealAxis = revealDir;
+  const filterReveal = revealFilter;
+  revealStops = false;
+  revealDir = 0;
+  revealFilter = false;
+
   const groups = buildDirectionGroups();
   if (groups.length === 0) {
     hideDirToggle();
@@ -348,7 +361,7 @@ function renderStopLists() {
 
   renderDirToggle(groups);       // (re)build only when the direction set changes
   updateDirToggleActive(groups); // slide the thumb + set aria-selected
-  renderStopListBody(active);
+  renderStopListBody(active, reveal, revealAxis, filterReveal);
 }
 
 function hideDirToggle() {
@@ -432,7 +445,7 @@ function updateDirToggleActive(groups) {
   }
 }
 
-function renderStopListBody(active) {
+function renderStopListBody(active, reveal, revealAxis, filterReveal) {
   // The active direction's stops (or an empty-filter message).
   if (active.candidates.length === 0) {
     el.stopLists.innerHTML = stopFilter
@@ -442,23 +455,37 @@ function renderStopListBody(active) {
   }
 
   let items = "";
-  for (const c of active.candidates) {
+  active.candidates.forEach((c, i) => {
     // Distance is only meaningful while the list is nearest-sorted.
     const distTag = sortByDistance && c.distance != null
       ? `<span class="stop-list__dist">${formatDistance(c.distance)}</span>`
       : "";
     const name = escapeHtml(c.desc || c.road || `Stop ${c.code}`);
     const sub = escapeHtml(`${c.road} · ${c.code}`);
+    // --i drives the staggered entrance; cap it so long routes don't trail off.
+    const stagger = reveal ? ` style="--i:${Math.min(i, 12)}"` : "";
     items +=
-      `<li class="stop-list__item" role="button" tabindex="0" ` +
+      `<li class="stop-list__item" role="button" tabindex="0"${stagger} ` +
           `data-code="${c.code}" data-dir="${c.dir}">` +
         `<span><span class="stop-list__name">${name}</span>` +
         `<span class="stop-list__sub">${sub}</span></span>` +
         distTag +
       `</li>`;
+  });
+  // Fresh service / re-sort rises up; a direction toggle slides in from the side
+  // the thumb travels toward (forward = from the right, back = from the left);
+  // live filtering gets a lighter whole-list fade (no per-item stagger, so it can
+  // re-run on every keystroke without flickering).
+  let revealCls = "";
+  if (reveal) {
+    revealCls = " stop-list--reveal";
+    if (revealAxis > 0) revealCls += " stop-list--reveal-fwd";
+    else if (revealAxis < 0) revealCls += " stop-list--reveal-back";
+  } else if (filterReveal) {
+    revealCls = " stop-list--filter";
   }
   el.stopLists.innerHTML =
-    `<section class="stop-list"><ul class="stop-list__items">${items}</ul></section>`;
+    `<section class="stop-list${revealCls}"><ul class="stop-list__items">${items}</ul></section>`;
 
   // Tap or keyboard-activate a stop — carry the direction it was listed under.
   el.stopLists.querySelectorAll(".stop-list__item").forEach((li) => {
@@ -483,11 +510,13 @@ function onStopDirToggle() {
   const newIdx = (oldIdx + 1) % dirs.length;
   activeListDir = dirs[newIdx];
   resetResult(); // switching direction clears the current selection + result card
+
+  // Slide the new direction's stops in, matching the thumb's travel direction.
+  revealStops = true;
+  revealDir = newIdx > oldIdx ? 1 : -1;
   renderStopLists();
 
   flowThumb(el.stopDirToggle, oldIdx, newIdx);
-  const list = el.stopLists.querySelector(".stop-list, .stop-lists__empty");
-  if (list) list.classList.add("stop-list--enter");
 }
 
 /** Keyboard activation for the toggle button (Enter / Space). */
@@ -532,6 +561,7 @@ function onLocate() {
     setLocateState("idle");
     spinLocateOnce();
     el.stopHint.textContent = "";
+    revealStops = true; // re-sorted to route order — rise the reordered list in
     renderStopLists();
     return;
   }
@@ -543,6 +573,7 @@ function onLocate() {
     setLocateState("active");
     spinLocateOnce();
     el.stopHint.textContent = "";
+    revealStops = true; // re-sorted by nearest — rise the reordered list in
     renderStopLists();
     return;
   }
@@ -564,6 +595,7 @@ function onLocate() {
       afterMinSpin(spinStart, () => {
         setLocateState("active");
         el.stopHint.textContent = "";
+        revealStops = true; // first fix acquired — rise the nearest-sorted list in
         renderStopLists();
       });
     },
@@ -682,6 +714,10 @@ function selectStop(code, preferredDir) {
 
   el.result.hidden = false;
   el.message.hidden = true;
+  // Replay the entrance on every pick, since the card updates in place.
+  el.result.classList.remove("result--enter");
+  void el.result.offsetWidth; // restart the animation
+  el.result.classList.add("result--enter");
   el.result.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -694,11 +730,11 @@ function renderTimes(route) {
   ];
 
   el.timesBody.innerHTML = rows
-    .map((row) => {
+    .map((row, i) => {
       const cls = row.key === today ? ' class="is-today"' : "";
       const badge = row.key === today ? ` <span class="today-badge">Today</span>` : "";
       return (
-        `<tr${cls}>` +
+        `<tr${cls} style="--i:${i}">` +
           `<td>${row.label}${badge}</td>` +
           `<td>${renderTime(row.first)}</td>` +
           `<td>${renderTime(row.last)}</td>` +
