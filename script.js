@@ -29,7 +29,7 @@ const S = { ROAD: 0, DESC: 1, LAT: 2, LNG: 3 };
 const { formatHHmm, isAfterMidnight, dayType, haversine, formatDistance } = self;
 
 // localStorage keys for the little bits of state we persist between visits.
-const LS = { GEO: "lbwa:geo" };
+const LS = { GEO: "lbwa:geo", SORT: "lbwa:sort" };
 
 // --- State -----------------------------------------------------------------
 let INDEX = null;            // { generated, services: Set<string> }
@@ -42,6 +42,7 @@ let terminalByDir = new Map();// direction -> terminal stop description
 let serviceToken = 0;        // guards against out-of-order async shard loads
 
 let userLocation = null;     // { lat, lng } once geolocation succeeds
+let sortByDistance = false;  // whether the lists are currently distance-sorted
 let stopFilter = "";         // text narrowing the direction lists
 let activeListDir = null;    // which direction the single stop list is showing
 
@@ -199,8 +200,8 @@ async function onServiceInput() {
   activeListDir = null;
 
   el.serviceHint.textContent = "";
-  // The new list already honours a location fix from earlier this session.
-  setLocateState(userLocation ? "active" : "idle");
+  // The new list already honours a sort choice from earlier this session.
+  setLocateState(sortByDistance ? "active" : "idle");
   el.stopHint.textContent = "";
   renderStopLists();
 
@@ -307,7 +308,7 @@ function buildDirectionGroups() {
 
     let candidates = [...seen.values()].map(makeCandidate);
     if (stopFilter) candidates = candidates.filter(matchesFilter);
-    if (userLocation) {
+    if (sortByDistance && userLocation) {
       candidates.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     } else {
       candidates.sort((a, b) => a.route[R.SEQ] - b.route[R.SEQ]);
@@ -442,7 +443,8 @@ function renderStopListBody(active) {
 
   let items = "";
   for (const c of active.candidates) {
-    const distTag = c.distance != null
+    // Distance is only meaningful while the list is nearest-sorted.
+    const distTag = sortByDistance && c.distance != null
       ? `<span class="stop-list__dist">${formatDistance(c.distance)}</span>`
       : "";
     const name = escapeHtml(c.desc || c.road || `Stop ${c.code}`);
@@ -516,42 +518,102 @@ function updateClear(input, btn) {
 // Geolocation — "near me"
 // ===========================================================================
 
+/**
+ * The button toggles the "sort by nearest" mode. Turning it on the first time
+ * acquires a location fix (may prompt); after that the fix is cached for the
+ * session, so flipping between nearest and route order is instant. The chosen
+ * mode is persisted so it carries across visits.
+ */
 function onLocate() {
+  // Currently nearest-sorted → flip back to route order (keep the cached fix).
+  if (sortByDistance) {
+    sortByDistance = false;
+    saveJSON(LS.SORT, false);
+    setLocateState("idle");
+    spinLocateOnce();
+    el.stopHint.textContent = "";
+    renderStopLists();
+    return;
+  }
+
+  // Turning nearest on and we already have a fix this session — instant.
+  if (userLocation) {
+    sortByDistance = true;
+    saveJSON(LS.SORT, true);
+    setLocateState("active");
+    spinLocateOnce();
+    el.stopHint.textContent = "";
+    renderStopLists();
+    return;
+  }
+
+  // First time on: acquire a location fix.
   if (!navigator.geolocation) {
     el.stopHint.textContent = "Geolocation isn't supported by this browser.";
     return;
   }
   setLocateState("locating");
+  const spinStart = Date.now();
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      saveJSON(LS.GEO, true); // remember consent so future visits auto-sort
-      setLocateState("active");
-      el.stopHint.textContent = "";
-      renderStopLists();
+      sortByDistance = true;
+      saveJSON(LS.GEO, true);  // remember consent so future visits auto-sort
+      saveJSON(LS.SORT, true); // and remember the nearest-sort choice
+      afterMinSpin(spinStart, () => {
+        setLocateState("active");
+        el.stopHint.textContent = "";
+        renderStopLists();
+      });
     },
     (err) => {
-      setLocateState("idle");
-      el.stopHint.textContent =
-        err.code === err.PERMISSION_DENIED
-          ? "Location permission denied — stops stay in route order."
-          : "Couldn't get your location — stops stay in route order.";
+      afterMinSpin(spinStart, () => {
+        setLocateState("idle"); // stays in route order
+        el.stopHint.textContent =
+          err.code === err.PERMISSION_DENIED
+            ? "Location permission denied — stops stay in route order."
+            : "Couldn't get your location — stops stay in route order.";
+      });
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
   );
+}
+
+// One crosshair turn's worth of spin — keep in sync with `.spin-once` in the CSS.
+const LOCATE_SPIN_MS = 500;
+
+/**
+ * Run `fn` once the acquiring spinner has been up for at least one full turn,
+ * so a fast (e.g. cached) fix on first use doesn't make the spinner flash. Runs
+ * immediately if that time has already elapsed.
+ */
+function afterMinSpin(startedAt, fn) {
+  const remaining = LOCATE_SPIN_MS - (Date.now() - startedAt);
+  if (remaining > 0) setTimeout(fn, remaining);
+  else fn();
+}
+
+/** Play a single crosshair rotation as feedback for an instant toggle. */
+function spinLocateOnce() {
+  const icon = el.locateBtn.querySelector(".locate-icon");
+  if (!icon) return;
+  icon.classList.remove("spin-once");
+  void icon.offsetWidth; // restart the animation if it's mid-flight
+  icon.classList.add("spin-once");
+  icon.addEventListener("animationend", () => icon.classList.remove("spin-once"), { once: true });
 }
 
 /** Reflect the location button's state without disturbing its icon. */
 function setLocateState(state) {
   el.locateBtn.classList.toggle("is-locating", state === "locating");
   el.locateBtn.classList.toggle("is-active", state === "active");
-  // Once the list is sorted by location there's nothing more to do, so disable it.
-  el.locateBtn.disabled = state === "locating" || state === "active";
+  // Only disabled while a fix is in flight; otherwise it's a live toggle.
+  el.locateBtn.disabled = state === "locating";
   el.locateBtn.title =
-    state === "active"  ? "List sorted by your location" :
+    state === "active"  ? "Sorted by nearest — tap for route order" :
     state === "locating" ? "Locating…" :
-    "Use my location";
+    "Sort by nearest";
   el.locateBtn.setAttribute("aria-label", el.locateBtn.title);
 }
 
@@ -564,6 +626,7 @@ function maybeAutoLocate() {
   if (userLocation) return;                          // already have it this session
   if (!navigator.geolocation) return;
   if (loadJSON(LS.GEO, false) !== true) return;      // never opted in before
+  if (loadJSON(LS.SORT, false) !== true) return;     // last choice was route order
   if (!(navigator.permissions && navigator.permissions.query)) return;
 
   navigator.permissions.query({ name: "geolocation" })
@@ -573,6 +636,7 @@ function maybeAutoLocate() {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          sortByDistance = true;
           setLocateState("active");
           renderStopLists();
         },

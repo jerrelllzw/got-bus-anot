@@ -243,6 +243,8 @@ html, body {
 
 /* Spin the crosshair while acquiring a fix. */
 .locate-btn.is-locating .locate-icon { animation: spin 0.9s linear infinite; }
+/* A single turn as feedback when toggling with a cached fix. */
+.locate-icon.spin-once { animation: spin 0.5s ease; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* --- Stop list + direction toggle ----------------------------------------- */
