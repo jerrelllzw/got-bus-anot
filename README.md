@@ -15,7 +15,7 @@ account key must stay secret, so the browser can't call it directly. Instead:
 1. `scripts/fetch_data.py` pulls the **BusRoutes** and **BusStops** datasets
    from LTA (server-side) and writes **sharded** JSON: a tiny index plus one
    small file per bus service.
-2. A scheduled **GitHub Action** runs that script weekly and commits the
+2. A scheduled **GitHub Action** runs that script daily and commits the
    refreshed data back to the repo.
 3. `index.html` / `style.css` / `script.js` read that static JSON —
    the page loads a few KB for the one service you ask about, not a big blob.
@@ -23,7 +23,7 @@ account key must stay secret, so the browser can't call it directly. Instead:
 Because the data is split per service, a visitor downloads roughly **5 KB**
 (one service shard) instead of a multi-megabyte combined file. Shards are
 cache-busted by the dataset's `generated` timestamp, so browsers cache them
-until the next weekly refresh.
+until the next daily refresh.
 
 ```
 scripts/fetch_data.py        # LTA -> sharded data/ (paginated, compacted) + holidays
@@ -34,7 +34,8 @@ data/svc/<SERVICE>.json      # one shard per service (stops embedded), loaded on
 data/holidays.json           # dates that use the Sun/PH schedule (auto-refreshed)
 logic.js                     # pure helpers (times, distance)
 index.html / style.css / script.js   # the static site
-manifest.webmanifest / sw.js / icon.svg   # PWA: installable + offline
+manifest.webmanifest / sw.js               # PWA: installable + offline
+icon.svg / icon-192.png / icon-512.png / apple-touch-icon.png   # app icons
 ```
 
 ## Setup
@@ -89,7 +90,7 @@ immediately. To refresh from LTA (the ~23,000-record dataset):
 3. Select the `main` branch and the `/ (root)` folder, then **Save**.
 4. Your site goes live at `https://<username>.github.io/<repo>/` within a minute.
 
-That's it — the weekly Action keeps the schedule data current.
+That's it — the daily Action keeps the schedule data current.
 
 ## Using the app
 
