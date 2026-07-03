@@ -16,7 +16,7 @@
 
 "use strict";
 
-const CACHE_VERSION = "gba-v1";
+const CACHE_VERSION = "gba-v2";
 
 // App shell — everything needed to boot offline. Kept relative so it works
 // under a GitHub Pages project subpath.
@@ -27,6 +27,10 @@ const SHELL = [
   "script.js",
   "logic.js",
   "manifest.webmanifest",
+  "fonts/jetbrains-mono-latin.woff2",
+  "fonts/jetbrains-mono-latin-ext.woff2",
+  "fonts/space-grotesk-latin.woff2",
+  "fonts/space-grotesk-latin-ext.woff2",
   "icon.svg",
   "icon-192.png",
   "icon-512.png",
@@ -58,7 +62,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // let fonts etc. hit the network
+  if (url.origin !== self.location.origin) return; // only manage same-origin requests
 
   // Freshness-sensitive index/holidays: network-first, fall back to cache.
   if (url.pathname.endsWith("/data/services.json") ||

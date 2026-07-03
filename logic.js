@@ -1,20 +1,12 @@
 /* ============================================================================
    Got Bus Anot? — pure, side-effect-free logic.
 
-   These functions touch no DOM and no globals, and are reused by the browser
-   front-end (script.js). Loaded in the browser via a plain <script> tag
-   (attaches to the global object), with a CommonJS export fallback — no build
-   step either way.
+   These functions touch no DOM and no globals. They're loaded in the browser
+   via a plain <script> tag and attach to the global object (window/self), so
+   script.js can use them — no build step.
    ========================================================================= */
 
-(function (root, factory) {
-  const api = factory();
-  if (typeof module !== "undefined" && module.exports) {
-    module.exports = api;              // CommonJS (Node)
-  } else {
-    Object.assign(root, api);          // browser global (window/self)
-  }
-})(typeof self !== "undefined" ? self : this, function () {
+(function (root) {
   "use strict";
 
   /** "0512" -> "05:12"; blank/invalid -> "—". */
@@ -70,12 +62,12 @@
     return `${(m / 1000).toFixed(1)} km`;
   }
 
-  return {
+  Object.assign(root, {
     formatHHmm,
     isAfterMidnight,
     localDateKey,
     dayType,
     haversine,
     formatDistance,
-  };
-});
+  });
+})(typeof self !== "undefined" ? self : this);

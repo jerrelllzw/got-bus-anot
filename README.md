@@ -34,6 +34,7 @@ data/svc/<SERVICE>.json      # one shard per service (stops embedded), loaded on
 data/holidays.json           # dates that use the Sun/PH schedule (auto-refreshed)
 logic.js                     # pure helpers (times, distance)
 index.html / style.css / script.js   # the static site
+fonts/*.woff2                # self-hosted Space Grotesk + JetBrains Mono (offline, no 3rd-party)
 manifest.webmanifest / sw.js               # PWA: installable + offline
 icon.svg / icon-192.png / icon-512.png / apple-touch-icon.png   # app icons
 ```
@@ -129,8 +130,8 @@ python -m http.server 8000
   [MOM's gazette](https://www.mom.gov.sg/employment-practices/public-holidays);
   edit `data/holidays.json` by hand to override a specific date.
 - **After-midnight edge cases.** Times like `0030` are treated as belonging to
-  the small hours of the next day for the countdown; unusual schedules may not
-  be perfectly represented.
+  the small hours of the next day and tagged with a `+1`; unusual schedules may
+  not be perfectly represented.
 - **Data is only as fresh as the last workflow run** (daily by default).
 
 ## Shareable links & offline use

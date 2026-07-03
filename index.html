@@ -14,13 +14,11 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <meta name="theme-color" content="#0a0a0b" />
 
-  <!-- Fonts: Space Grotesk for the title, JetBrains Mono for data/times. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap"
-    rel="stylesheet"
-  />
+  <!-- Fonts: Space Grotesk for the title, JetBrains Mono for data/times.
+       Self-hosted (see fonts/, @font-face in style.css) so the app keeps its
+       typography offline and makes no third-party requests. -->
+  <link rel="preload" href="fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
 
   <link rel="stylesheet" href="style.css" />
 </head>

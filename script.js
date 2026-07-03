@@ -146,6 +146,8 @@ function wireEvents() {
   el.stopFilterClear.addEventListener("click", onStopFilterClear);
   el.stopDirToggle.addEventListener("click", onStopDirToggle);
   el.stopDirToggle.addEventListener("keydown", onStopDirToggleKey);
+  // Arrow-key navigation for the stop listbox (delegated; survives re-renders).
+  el.stopLists.addEventListener("keydown", onStopListKey);
 
   // Prevent the form from actually submitting/reloading.
   document.getElementById("search-form").addEventListener("submit", (e) => e.preventDefault());
@@ -363,6 +365,15 @@ function renderStopLists() {
   }
   const active = groups.find((g) => g.dir === activeListDir);
 
+  // The list is the active tab's panel (only meaningful with 2+ directions).
+  if (groups.length > 1) {
+    el.stopLists.setAttribute("role", "tabpanel");
+    el.stopLists.setAttribute("aria-labelledby", `dir-tab-${activeListDir}`);
+  } else {
+    el.stopLists.removeAttribute("role");
+    el.stopLists.removeAttribute("aria-labelledby");
+  }
+
   renderDirToggle(groups);       // (re)build only when the direction set changes
   updateDirToggleActive(groups); // slide the thumb + set aria-selected
   renderStopListBody(active, reveal, revealAxis, filterReveal);
@@ -380,9 +391,10 @@ function hideDirToggle() {
 
 /**
  * Build the toggle once per direction set (stable DOM = animatable). With two+
- * directions the whole control is one button (click flips direction); a single
- * direction (loop service) renders the same look but static — it doubles as the
- * list header.
+ * directions it's a tablist — one tab per direction, each individually
+ * selectable (click or arrow keys); the stop list below is its tabpanel. A
+ * single direction (loop service) renders the same look but static — it doubles
+ * as the list header.
  */
 function renderDirToggle(groups) {
   if (groups.length === 0) { hideDirToggle(); return; }
@@ -394,35 +406,47 @@ function renderDirToggle(groups) {
   el.stopDirToggle.style.setProperty("--n", groups.length);
   el.stopDirToggle.classList.toggle("dir-toggle--static", !interactive);
   if (interactive) {
-    el.stopDirToggle.setAttribute("role", "button");
-    el.stopDirToggle.setAttribute("tabindex", "0");
+    el.stopDirToggle.setAttribute("role", "tablist");
+    el.stopDirToggle.setAttribute("aria-label", "Travel direction");
   } else {
     el.stopDirToggle.removeAttribute("role");
-    el.stopDirToggle.removeAttribute("tabindex");
     el.stopDirToggle.removeAttribute("aria-label");
   }
-  el.stopDirToggle.innerHTML = dirToggleMarkup(groups.map((g) => ({ dir: g.dir, label: g.label })));
+  el.stopDirToggle.removeAttribute("tabindex"); // the tabs are the tab stops now
+  el.stopDirToggle.innerHTML = dirToggleMarkup(
+    groups.map((g) => ({ dir: g.dir, label: g.label })), interactive
+  );
   el.stopDirToggle.hidden = false;
 }
 
-/** Shared markup for a segmented toggle: sliding thumb + one label per segment. */
-function dirToggleMarkup(segments) {
+/**
+ * Shared markup for a segmented toggle: sliding thumb + one label per segment.
+ * When interactive, each segment is a tab (roving tabindex set by moveThumb).
+ */
+function dirToggleMarkup(segments, interactive) {
   return (
     `<span class="dir-toggle__thumb" aria-hidden="true"><span class="dir-toggle__fill"></span></span>` +
     segments
-      .map((s) =>
-        `<span class="dir-toggle__seg" data-dir="${s.dir}">` +
-          `<span class="dir-toggle__seg-label">${escapeHtml(s.label)}</span>` +
-        `</span>`
-      )
+      .map((s) => {
+        const tab = interactive
+          ? ` role="tab" id="dir-tab-${s.dir}" aria-controls="stop-lists" tabindex="-1"`
+          : "";
+        return (
+          `<span class="dir-toggle__seg" data-dir="${s.dir}"${tab}>` +
+            `<span class="dir-toggle__seg-label">${escapeHtml(s.label)}</span>` +
+          `</span>`
+        );
+      })
       .join("")
   );
 }
 
-/** Slide the thumb to `idx` within a toggle and mark that segment selected. */
+/** Slide the thumb to `idx`, mark that segment selected, and rove its tabindex. */
 function moveThumb(toggle, idx) {
   toggle.querySelectorAll(".dir-toggle__seg").forEach((seg, i) => {
-    seg.setAttribute("aria-selected", String(i === idx));
+    const selected = i === idx;
+    seg.setAttribute("aria-selected", String(selected));
+    if (seg.hasAttribute("role")) seg.tabIndex = selected ? 0 : -1; // only tabs
   });
   const thumb = toggle.querySelector(".dir-toggle__thumb");
   if (thumb && idx >= 0) thumb.style.transform = `translateX(${idx * 100}%)`;
@@ -439,14 +463,11 @@ function flowThumb(toggle, oldIdx, newIdx) {
   thumb.classList.add("is-flowing");
 }
 
-/** Point the thumb at the active direction and mark the selected segment. */
+/** Point the thumb at the active direction and mark the selected tab. */
 function updateDirToggleActive(groups) {
   if (groups.length === 0) return;
   const idx = groups.findIndex((g) => g.dir === activeListDir);
   moveThumb(el.stopDirToggle, idx);
-  if (groups.length > 1 && groups[idx]) {
-    el.stopDirToggle.setAttribute("aria-label", `Direction ${groups[idx].label} — tap to switch`);
-  }
 }
 
 function renderStopListBody(active, reveal, revealAxis, filterReveal) {
@@ -468,9 +489,11 @@ function renderStopListBody(active, reveal, revealAxis, filterReveal) {
     const sub = escapeHtml(`${c.road} · ${c.code}`);
     // --i drives the staggered entrance; cap it so long routes don't trail off.
     const stagger = reveal ? ` style="--i:${Math.min(i, 12)}"` : "";
+    const selected = c.code === activeCode;
+    // Roving tabindex: exactly one option is tab-reachable (fixed up below).
     items +=
-      `<li class="stop-list__item" role="button" tabindex="0"${stagger} ` +
-          `data-code="${c.code}" data-dir="${c.dir}">` +
+      `<li class="stop-list__item" role="option" aria-selected="${selected}" ` +
+          `tabindex="-1"${stagger} data-code="${c.code}" data-dir="${c.dir}">` +
         `<span><span class="stop-list__name">${name}</span>` +
         `<span class="stop-list__sub">${sub}</span></span>` +
         distTag +
@@ -488,31 +511,65 @@ function renderStopListBody(active, reveal, revealAxis, filterReveal) {
   } else if (filterReveal) {
     revealCls = " stop-list--filter";
   }
+  const listLabel = escapeHtml(`Stops ${active.label}`);
   el.stopLists.innerHTML =
-    `<section class="stop-list${revealCls}"><ul class="stop-list__items">${items}</ul></section>`;
+    `<section class="stop-list${revealCls}">` +
+      `<ul class="stop-list__items" role="listbox" aria-label="${listLabel}">${items}</ul>` +
+    `</section>`;
 
-  // Tap or keyboard-activate a stop — carry the direction it was listed under.
-  el.stopLists.querySelectorAll(".stop-list__item").forEach((li) => {
-    const pick = () => selectStop(li.dataset.code, Number(li.dataset.dir));
-    li.addEventListener("click", pick);
-    li.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); }
-    });
+  // Tap a stop — carry the direction it was listed under. (Keyboard activation
+  // and arrow navigation are handled by the delegated onStopListKey.)
+  const options = [...el.stopLists.querySelectorAll(".stop-list__item")];
+  options.forEach((li) => {
+    li.addEventListener("click", () => selectStop(li.dataset.code, Number(li.dataset.dir)));
   });
+
+  // Roving tabindex: the selected option is the tab stop, else the first one.
+  let focusIdx = options.findIndex((li) => li.dataset.code === activeCode);
+  if (focusIdx < 0) focusIdx = 0;
+  if (options[focusIdx]) options[focusIdx].tabIndex = 0;
 
   // Re-apply the selection highlight (the list was just rebuilt).
   if (activeCode != null) markSelectedStop(activeCode);
 }
 
-/** The whole control is one button: flip to the next direction (with a flow). */
-function onStopDirToggle() {
+/** Click a direction tab to select it (clicking the active one is a no-op). */
+function onStopDirToggle(e) {
+  if (el.stopDirToggle.classList.contains("dir-toggle--static")) return;
+  const seg = e.target.closest(".dir-toggle__seg");
+  if (!seg || !el.stopDirToggle.contains(seg)) return;
+  selectDirection(Number(seg.dataset.dir), { focus: false });
+}
+
+/** Roving-tabindex arrow-key navigation for the direction tablist. */
+function onStopDirToggleKey(e) {
+  if (el.stopDirToggle.classList.contains("dir-toggle--static")) return;
   const dirs = [...el.stopDirToggle.querySelectorAll(".dir-toggle__seg")]
     .map((seg) => Number(seg.dataset.dir));
   if (dirs.length < 2) return;
 
+  const cur = dirs.indexOf(activeListDir);
+  let next = null;
+  switch (e.key) {
+    case "ArrowRight": case "ArrowDown": next = (cur + 1) % dirs.length; break;
+    case "ArrowLeft":  case "ArrowUp":   next = (cur - 1 + dirs.length) % dirs.length; break;
+    case "Home": next = 0; break;
+    case "End":  next = dirs.length - 1; break;
+    default: return;
+  }
+  e.preventDefault();
+  selectDirection(dirs[next], { focus: true });
+}
+
+/** Switch the visible direction, animating the thumb from the old tab to the new. */
+function selectDirection(newDir, { focus = false } = {}) {
+  const dirs = [...el.stopDirToggle.querySelectorAll(".dir-toggle__seg")]
+    .map((seg) => Number(seg.dataset.dir));
   const oldIdx = dirs.indexOf(activeListDir);
-  const newIdx = (oldIdx + 1) % dirs.length;
-  activeListDir = dirs[newIdx];
+  const newIdx = dirs.indexOf(newDir);
+  if (newIdx < 0 || newIdx === oldIdx) return;
+
+  activeListDir = newDir;
   resetResult(); // switching direction clears the current selection + result card
 
   // Slide the new direction's stops in, matching the thumb's travel direction.
@@ -522,17 +579,50 @@ function onStopDirToggle() {
   updateUrl(); // direction changed, selection cleared
 
   flowThumb(el.stopDirToggle, oldIdx, newIdx);
+  if (focus) {
+    const seg = el.stopDirToggle.querySelector(`.dir-toggle__seg[data-dir="${newDir}"]`);
+    if (seg) seg.focus();
+  }
 }
 
-/** Keyboard activation for the toggle button (Enter / Space). */
-function onStopDirToggleKey(e) {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onStopDirToggle(); }
+/**
+ * Arrow-key navigation + activation for the stop listbox (delegated once, so it
+ * survives the list being rebuilt). Up/Down move the roving focus; Enter/Space
+ * pick the focused stop.
+ */
+function onStopListKey(e) {
+  const li = e.target.closest(".stop-list__item");
+  if (!li) return;
+  const options = [...el.stopLists.querySelectorAll(".stop-list__item")];
+  const cur = options.indexOf(li);
+  if (cur < 0) return;
+
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    selectStop(li.dataset.code, Number(li.dataset.dir));
+    return;
+  }
+
+  let next = null;
+  switch (e.key) {
+    case "ArrowDown": next = Math.min(cur + 1, options.length - 1); break;
+    case "ArrowUp":   next = Math.max(cur - 1, 0); break;
+    case "Home": next = 0; break;
+    case "End":  next = options.length - 1; break;
+    default: return;
+  }
+  e.preventDefault();
+  options.forEach((o) => (o.tabIndex = -1));
+  options[next].tabIndex = 0;
+  options[next].focus();
 }
 
 /** Highlight the chosen stop in the list (if its direction is showing). */
 function markSelectedStop(code) {
   el.stopLists.querySelectorAll(".stop-list__item").forEach((li) => {
-    li.classList.toggle("is-selected", li.dataset.code === code);
+    const selected = li.dataset.code === code;
+    li.classList.toggle("is-selected", selected);
+    li.setAttribute("aria-selected", String(selected));
   });
 }
 
