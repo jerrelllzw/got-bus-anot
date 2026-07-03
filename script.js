@@ -123,6 +123,7 @@ async function init() {
 
   startClock();
   wireEvents();
+  await restoreFromUrl();
 }
 
 /** Live Singapore-time clock in the top bar (HH:MM), ticking each second. */
@@ -163,6 +164,7 @@ async function onServiceInput() {
     currentService = null;
     el.serviceHint.textContent = "Enter a service number to load its stops.";
     clearStopLists("Pick a service first.");
+    updateUrl();
     return;
   }
 
@@ -170,6 +172,7 @@ async function onServiceInput() {
     currentService = null;
     el.serviceHint.textContent = `No service "${service}" found.`;
     clearStopLists("Pick a service first.");
+    updateUrl();
     return;
   }
 
@@ -208,6 +211,7 @@ async function onServiceInput() {
   el.stopHint.textContent = "";
   revealStops = true; // fresh service — let its stops animate in
   renderStopLists();
+  updateUrl();
 
   // If the user already granted location on a past visit, sort by distance
   // straight away (silently — no fresh permission prompt).
@@ -515,6 +519,7 @@ function onStopDirToggle() {
   revealStops = true;
   revealDir = newIdx > oldIdx ? 1 : -1;
   renderStopLists();
+  updateUrl(); // direction changed, selection cleared
 
   flowThumb(el.stopDirToggle, oldIdx, newIdx);
 }
@@ -719,6 +724,7 @@ function selectStop(code, preferredDir) {
   void el.result.offsetWidth; // restart the animation
   el.result.classList.add("result--enter");
   el.result.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  updateUrl(); // reflect the picked stop so the page is shareable
 }
 
 function renderTimes(route) {
@@ -760,6 +766,44 @@ function renderTime(hhmm) {
 /** The service currently loaded (canonical casing from the shard). */
 function currentServiceId() {
   return currentService ? currentService.service : el.serviceInput.value.trim().toUpperCase();
+}
+
+// --- Shareable URL state ----------------------------------------------------
+// The current service / direction / stop live in the query string (?svc&dir&code)
+// so a view can be linked, bookmarked, and survive a refresh. We use
+// replaceState so this never piles up browser-history entries.
+
+/** Mirror the current selection into the URL query string. */
+function updateUrl() {
+  const params = new URLSearchParams();
+  if (currentService) {
+    params.set("svc", currentService.service);
+    if (activeListDir != null) params.set("dir", String(activeListDir));
+    if (activeCode) params.set("code", activeCode);
+  }
+  const qs = params.toString();
+  history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
+}
+
+/** On boot, rebuild the service / direction / stop selection from the URL. */
+async function restoreFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const svc = (params.get("svc") || "").trim().toUpperCase();
+  if (!svc || !INDEX.services.has(svc)) return;
+
+  el.serviceInput.value = svc;
+  updateClear(el.serviceInput, el.serviceClear);
+  await onServiceInput();          // loads the shard, renders lists, sets a default direction
+  if (!currentService) return;     // load failed — leave the field populated for a retry
+
+  const dir = Number(params.get("dir"));
+  if (params.get("dir") != null && terminalByDir.has(dir)) {
+    activeListDir = dir;
+    renderStopLists();             // reflect the requested direction (moves the toggle)
+  }
+
+  const code = params.get("code");
+  if (code) selectStop(code, activeListDir);
 }
 
 // --- Tiny localStorage wrappers (never throw; storage may be unavailable) ---

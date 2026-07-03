@@ -26,14 +26,15 @@ cache-busted by the dataset's `generated` timestamp, so browsers cache them
 until the next weekly refresh.
 
 ```
-scripts/fetch_data.py        # LTA -> sharded data/ (paginated, compacted)
-.github/workflows/           # weekly + manual refresh, commits the shards
+scripts/fetch_data.py        # LTA -> sharded data/ (paginated, compacted) + holidays
+.github/workflows/           # daily + manual refresh, commits the shards
   update-data.yml
 data/services.json           # index: { generated, services: [...] }  (loaded at boot)
 data/svc/<SERVICE>.json      # one shard per service (stops embedded), loaded on demand
-data/holidays.json           # dates that use the Sun/PH schedule (hand-maintained)
+data/holidays.json           # dates that use the Sun/PH schedule (auto-refreshed)
 logic.js                     # pure helpers (times, distance)
 index.html / style.css / script.js   # the static site
+manifest.webmanifest / sw.js / icon.svg   # PWA: installable + offline
 ```
 
 ## Setup
@@ -74,9 +75,11 @@ immediately. To refresh from LTA (the ~23,000-record dataset):
   python scripts/fetch_data.py
   ```
 
-  This regenerates `data/svc/*.json` and `data/services.json` (it never
-  touches `data/holidays.json`). Commit them if you want (CI will keep them
-  fresh afterwards). The script uses only the Python standard library — no
+  This regenerates `data/svc/*.json`, `data/services.json`, and
+  `data/holidays.json` (holidays come from the key-less
+  [Nager.Date](https://date.nager.at/) API; a failure there leaves the existing
+  holiday file untouched). Commit them if you want (CI will keep them fresh
+  afterwards). The script uses only the Python standard library — no
   `pip install` needed.
 
 ### 4. Enable GitHub Pages
@@ -113,20 +116,32 @@ python -m http.server 8000
 
 ## Known limitations
 
-- **Public holidays are a hand-maintained list.** On dates listed in
-  `data/holidays.json` the app shows the *Sun / PH* schedule. Only the
-  fixed-date 2026 holidays (New Year's Day, Labour Day, National Day,
-  Christmas) are seeded, because they're the same every year. The
-  variable-date holidays (Chinese New Year, Good Friday, Hari Raya Puasa,
-  Vesak Day, Hari Raya Haji, Deepavali) change yearly and **must be added**
-  from [MOM's official gazette](https://www.mom.gov.sg/employment-practices/public-holidays)
-  — otherwise those days fall back to the normal weekday/Saturday split.
-- **No live vehicle tracking.** LTA's real-time Bus Arrival endpoint also isn't
+- **No live vehicle tracking.** LTA's real-time Bus Arrival endpoint isn't
   reachable from a static page without a proxy, so this app is scheduled-only.
+  Adding live arrivals would mean introducing a small server-side proxy to hold
+  the account key — a deliberate departure from this app's no-backend design.
+- **Public-holiday dates for lunar/Islamic holidays are estimates.** The
+  holiday list is refreshed automatically from the
+  [Nager.Date](https://date.nager.at/) API (current + next year, including the
+  in-lieu Monday when a holiday falls on a Sunday). Movable holidays such as
+  Hari Raya can occasionally differ by a day from
+  [MOM's gazette](https://www.mom.gov.sg/employment-practices/public-holidays);
+  edit `data/holidays.json` by hand to override a specific date.
 - **After-midnight edge cases.** Times like `0030` are treated as belonging to
   the small hours of the next day for the countdown; unusual schedules may not
   be perfectly represented.
-- **Data is only as fresh as the last workflow run** (weekly by default).
+- **Data is only as fresh as the last workflow run** (daily by default).
+
+## Shareable links & offline use
+
+- **Shareable links.** The loaded service, chosen direction, and selected stop
+  are kept in the URL (`?svc=196&dir=1&code=84009`), so a view can be
+  bookmarked, shared, or restored after a refresh.
+- **Installable / offline (PWA).** A `manifest.webmanifest` and `sw.js` service
+  worker cache the app shell and each service you view, so the page installs to
+  a home screen and works with no signal (e.g. on the bus). The index and
+  holiday data are fetched network-first so they stay fresh when you're online.
+  Bump `CACHE_VERSION` in `sw.js` when the shell files change.
 
 ## Data licence & attribution
 

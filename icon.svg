@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Got Bus Anot?">
+  <!-- Full-bleed dark background so the icon works as a maskable PWA tile. -->
+  <rect width="512" height="512" fill="#0a0a0b"/>
+  <!-- Amber LED bus, kept within the central ~80% maskable safe zone. -->
+  <g fill="#ffb000">
+    <rect x="132" y="120" width="248" height="230" rx="34"/>
+    <rect x="168" y="360" width="26" height="44" rx="8"/>
+    <rect x="318" y="360" width="26" height="44" rx="8"/>
+  </g>
+  <!-- Windows + details punched out in the background colour. -->
+  <g fill="#0a0a0b">
+    <rect x="160" y="152" width="88" height="70" rx="12"/>
+    <rect x="264" y="152" width="88" height="70" rx="12"/>
+    <rect x="160" y="258" width="192" height="26" rx="13"/>
+    <circle cx="180" cy="320" r="16"/>
+    <circle cx="332" cy="320" r="16"/>
+  </g>
+</svg>

@@ -53,6 +53,12 @@ BASE_URL = "https://datamall2.mytransport.sg/ltaodataservice"
 BUS_ROUTES_URL = f"{BASE_URL}/BusRoutes"
 BUS_STOPS_URL = f"{BASE_URL}/BusStops"
 
+# Public holidays: Nager.Date is a free, key-less API that returns Singapore's
+# gazetted holidays already shifted to their observed date (e.g. a Sunday
+# holiday's in-lieu Monday), which is exactly the set of dates that run the
+# Sun/PH bus schedule. No secret needed, so it's safe to call from CI.
+NAGER_HOLIDAYS_URL = "https://date.nager.at/api/v3/PublicHolidays/{year}/SG"
+
 PAGE_SIZE = 500          # LTA returns at most 500 records per call.
 REQUEST_TIMEOUT = 30     # seconds
 MAX_RETRIES = 4          # per page, with exponential backoff
@@ -63,6 +69,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
 SVC_DIR = DATA_DIR / "svc"
 INDEX_PATH = DATA_DIR / "services.json"
+HOLIDAYS_PATH = DATA_DIR / "holidays.json"
+
+HOLIDAYS_NOTE = (
+    "Singapore public holidays as YYYY-MM-DD (local). On these dates the app "
+    "shows the 'Sun / PH' schedule. Refreshed automatically by "
+    "scripts/fetch_data.py from the Nager.Date API "
+    "(https://date.nager.at/) — dates are the observed holiday (a Sunday "
+    "holiday's in-lieu Monday is included). Lunar/Islamic holidays are the "
+    "source's best estimate and can occasionally differ by a day from MOM's "
+    "gazette (https://www.mom.gov.sg/employment-practices/public-holidays); "
+    "edit this file by hand if you need to override one."
+)
 
 
 def load_dotenv() -> None:
@@ -139,6 +157,52 @@ def fetch_all(url: str, account_key: str, label: str) -> list[dict]:
         time.sleep(0.1)
     print(f"  {label}: {len(records)} records (done)")
     return records
+
+
+def fetch_holidays(years: list[int]) -> list[str]:
+    """Fetch Singapore public holidays for ``years`` from Nager.Date.
+
+    Returns a sorted, de-duplicated list of ``YYYY-MM-DD`` strings. Raises if a
+    year cannot be fetched — the caller treats holidays as best-effort and keeps
+    the committed file on failure, so bus data still refreshes.
+    """
+    dates: set[str] = set()
+    for year in years:
+        url = NAGER_HOLIDAYS_URL.format(year=year)
+        request = Request(url, headers={"accept": "application/json"})
+        with urlopen(request, timeout=REQUEST_TIMEOUT) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        for h in payload:
+            date = h.get("date")
+            if date:
+                dates.add(date)
+        print(f"  holidays {year}: {len(payload)} records")
+    return sorted(dates)
+
+
+def write_holidays(generated: str, dates: list[str]) -> None:
+    """Write ``data/holidays.json`` (pretty-printed — it's small and hand-editable)."""
+    with open(HOLIDAYS_PATH, "w", encoding="utf-8") as f:
+        json.dump(
+            {"_note": HOLIDAYS_NOTE, "generated": generated, "holidays": dates},
+            f, ensure_ascii=False, indent=2,
+        )
+        f.write("\n")
+    print(f"Wrote {len(dates)} public holidays to {HOLIDAYS_PATH.relative_to(REPO_ROOT)}")
+
+
+def update_holidays(generated: str) -> None:
+    """Refresh holidays for the current and next year; keep the existing file on
+    failure so a Nager.Date outage never aborts the bus-data refresh."""
+    year = datetime.now(timezone.utc).year
+    try:
+        dates = fetch_holidays([year, year + 1])
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as err:
+        print(f"  ! holiday refresh failed ({err}); keeping existing holidays.json",
+              file=sys.stderr)
+        return
+    if dates:
+        write_holidays(generated, dates)
 
 
 def compact_routes(raw_routes: list[dict]) -> list[list]:
@@ -245,6 +309,7 @@ def main() -> None:
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     write_shards(generated, compact_routes(raw_routes), compact_stops(raw_stops))
+    update_holidays(generated)
 
 
 if __name__ == "__main__":

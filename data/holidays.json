@@ -1,10 +1,28 @@
 {
-  "_note": "Singapore public holidays as YYYY-MM-DD (local). On these dates the app shows the 'Sun / PH' schedule. Only the four FIXED-DATE 2026 holidays are seeded here because they are the same every year and always correct. The variable-date holidays (Chinese New Year, Good Friday, Hari Raya Puasa, Vesak Day, Hari Raya Haji, Deepavali) change yearly and MUST be added from MOM's official gazette: https://www.mom.gov.sg/employment-practices/public-holidays . Add each observed date (including any Monday observed when a holiday falls on a Sunday).",
+  "_note": "Singapore public holidays as YYYY-MM-DD (local). On these dates the app shows the 'Sun / PH' schedule. Refreshed automatically by scripts/fetch_data.py from the Nager.Date API (https://date.nager.at/) — dates are the observed holiday (a Sunday holiday's in-lieu Monday is included). Lunar/Islamic holidays are the source's best estimate and can occasionally differ by a day from MOM's gazette (https://www.mom.gov.sg/employment-practices/public-holidays); edit this file by hand if you need to override one.",
+  "generated": "2026-07-03T02:56:14Z",
   "holidays": [
     "2026-01-01",
+    "2026-02-17",
+    "2026-02-18",
+    "2026-03-21",
+    "2026-04-03",
     "2026-05-01",
-    "2026-08-09",
+    "2026-05-27",
+    "2026-06-01",
     "2026-08-10",
-    "2026-12-25"
+    "2026-11-09",
+    "2026-12-25",
+    "2027-01-01",
+    "2027-02-06",
+    "2027-02-08",
+    "2027-03-10",
+    "2027-03-26",
+    "2027-05-01",
+    "2027-05-17",
+    "2027-05-20",
+    "2027-08-09",
+    "2027-10-28",
+    "2027-12-25"
   ]
 }

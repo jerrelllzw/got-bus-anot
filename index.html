@@ -9,6 +9,11 @@
   <!-- Emoji favicon via inline SVG — no separate icon file to ship. -->
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%8C%3C/text%3E%3C/svg%3E" />
 
+  <!-- Installable, offline-capable PWA. -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="theme-color" content="#0a0a0b" />
+
   <!-- Fonts: Space Grotesk for the title, JetBrains Mono for data/times. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -166,5 +171,16 @@
 
   <script src="logic.js"></script>
   <script src="script.js"></script>
+
+  <!-- Register the service worker (progressive enhancement; ignored if unsupported). -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch((err) =>
+          console.warn("Service worker registration failed:", err)
+        );
+      });
+    }
+  </script>
 </body>
 </html>
