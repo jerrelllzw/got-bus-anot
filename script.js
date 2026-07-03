@@ -365,15 +365,6 @@ function renderStopLists() {
   }
   const active = groups.find((g) => g.dir === activeListDir);
 
-  // The list is the active tab's panel (only meaningful with 2+ directions).
-  if (groups.length > 1) {
-    el.stopLists.setAttribute("role", "tabpanel");
-    el.stopLists.setAttribute("aria-labelledby", `dir-tab-${activeListDir}`);
-  } else {
-    el.stopLists.removeAttribute("role");
-    el.stopLists.removeAttribute("aria-labelledby");
-  }
-
   renderDirToggle(groups);       // (re)build only when the direction set changes
   updateDirToggleActive(groups); // slide the thumb + set aria-selected
   renderStopListBody(active, reveal, revealAxis, filterReveal);
@@ -391,10 +382,9 @@ function hideDirToggle() {
 
 /**
  * Build the toggle once per direction set (stable DOM = animatable). With two+
- * directions it's a tablist — one tab per direction, each individually
- * selectable (click or arrow keys); the stop list below is its tabpanel. A
- * single direction (loop service) renders the same look but static — it doubles
- * as the list header.
+ * directions the whole control is a single button — clicking anywhere on it
+ * cycles to the next direction. A single direction (loop service) renders the
+ * same look but static — it doubles as the list header.
  */
 function renderDirToggle(groups) {
   if (groups.length === 0) { hideDirToggle(); return; }
@@ -406,47 +396,35 @@ function renderDirToggle(groups) {
   el.stopDirToggle.style.setProperty("--n", groups.length);
   el.stopDirToggle.classList.toggle("dir-toggle--static", !interactive);
   if (interactive) {
-    el.stopDirToggle.setAttribute("role", "tablist");
-    el.stopDirToggle.setAttribute("aria-label", "Travel direction");
+    el.stopDirToggle.setAttribute("role", "button");
+    el.stopDirToggle.setAttribute("tabindex", "0");
   } else {
     el.stopDirToggle.removeAttribute("role");
+    el.stopDirToggle.removeAttribute("tabindex");
     el.stopDirToggle.removeAttribute("aria-label");
   }
-  el.stopDirToggle.removeAttribute("tabindex"); // the tabs are the tab stops now
-  el.stopDirToggle.innerHTML = dirToggleMarkup(
-    groups.map((g) => ({ dir: g.dir, label: g.label })), interactive
-  );
+  el.stopDirToggle.innerHTML = dirToggleMarkup(groups.map((g) => ({ dir: g.dir, label: g.label })));
   el.stopDirToggle.hidden = false;
 }
 
-/**
- * Shared markup for a segmented toggle: sliding thumb + one label per segment.
- * When interactive, each segment is a tab (roving tabindex set by moveThumb).
- */
-function dirToggleMarkup(segments, interactive) {
+/** Shared markup for a segmented toggle: sliding thumb + one label per segment. */
+function dirToggleMarkup(segments) {
   return (
     `<span class="dir-toggle__thumb" aria-hidden="true"><span class="dir-toggle__fill"></span></span>` +
     segments
-      .map((s) => {
-        const tab = interactive
-          ? ` role="tab" id="dir-tab-${s.dir}" aria-controls="stop-lists" tabindex="-1"`
-          : "";
-        return (
-          `<span class="dir-toggle__seg" data-dir="${s.dir}"${tab}>` +
-            `<span class="dir-toggle__seg-label">${escapeHtml(s.label)}</span>` +
-          `</span>`
-        );
-      })
+      .map((s) =>
+        `<span class="dir-toggle__seg" data-dir="${s.dir}">` +
+          `<span class="dir-toggle__seg-label">${escapeHtml(s.label)}</span>` +
+        `</span>`
+      )
       .join("")
   );
 }
 
-/** Slide the thumb to `idx`, mark that segment selected, and rove its tabindex. */
+/** Slide the thumb to `idx` within the toggle and mark that segment selected. */
 function moveThumb(toggle, idx) {
   toggle.querySelectorAll(".dir-toggle__seg").forEach((seg, i) => {
-    const selected = i === idx;
-    seg.setAttribute("aria-selected", String(selected));
-    if (seg.hasAttribute("role")) seg.tabIndex = selected ? 0 : -1; // only tabs
+    seg.setAttribute("aria-selected", String(i === idx));
   });
   const thumb = toggle.querySelector(".dir-toggle__thumb");
   if (thumb && idx >= 0) thumb.style.transform = `translateX(${idx * 100}%)`;
@@ -463,11 +441,14 @@ function flowThumb(toggle, oldIdx, newIdx) {
   thumb.classList.add("is-flowing");
 }
 
-/** Point the thumb at the active direction and mark the selected tab. */
+/** Point the thumb at the active direction and label the button accordingly. */
 function updateDirToggleActive(groups) {
   if (groups.length === 0) return;
   const idx = groups.findIndex((g) => g.dir === activeListDir);
   moveThumb(el.stopDirToggle, idx);
+  if (groups.length > 1 && groups[idx]) {
+    el.stopDirToggle.setAttribute("aria-label", `Direction ${groups[idx].label} — tap to switch`);
+  }
 }
 
 function renderStopListBody(active, reveal, revealAxis, filterReveal) {
@@ -533,43 +514,15 @@ function renderStopListBody(active, reveal, revealAxis, filterReveal) {
   if (activeCode != null) markSelectedStop(activeCode);
 }
 
-/** Click a direction tab to select it (clicking the active one is a no-op). */
-function onStopDirToggle(e) {
-  if (el.stopDirToggle.classList.contains("dir-toggle--static")) return;
-  const seg = e.target.closest(".dir-toggle__seg");
-  if (!seg || !el.stopDirToggle.contains(seg)) return;
-  selectDirection(Number(seg.dataset.dir), { focus: false });
-}
-
-/** Roving-tabindex arrow-key navigation for the direction tablist. */
-function onStopDirToggleKey(e) {
-  if (el.stopDirToggle.classList.contains("dir-toggle--static")) return;
+/** The whole control is one button: flip to the next direction (with a flow). */
+function onStopDirToggle() {
   const dirs = [...el.stopDirToggle.querySelectorAll(".dir-toggle__seg")]
     .map((seg) => Number(seg.dataset.dir));
   if (dirs.length < 2) return;
 
-  const cur = dirs.indexOf(activeListDir);
-  let next = null;
-  switch (e.key) {
-    case "ArrowRight": case "ArrowDown": next = (cur + 1) % dirs.length; break;
-    case "ArrowLeft":  case "ArrowUp":   next = (cur - 1 + dirs.length) % dirs.length; break;
-    case "Home": next = 0; break;
-    case "End":  next = dirs.length - 1; break;
-    default: return;
-  }
-  e.preventDefault();
-  selectDirection(dirs[next], { focus: true });
-}
-
-/** Switch the visible direction, animating the thumb from the old tab to the new. */
-function selectDirection(newDir, { focus = false } = {}) {
-  const dirs = [...el.stopDirToggle.querySelectorAll(".dir-toggle__seg")]
-    .map((seg) => Number(seg.dataset.dir));
   const oldIdx = dirs.indexOf(activeListDir);
-  const newIdx = dirs.indexOf(newDir);
-  if (newIdx < 0 || newIdx === oldIdx) return;
-
-  activeListDir = newDir;
+  const newIdx = (oldIdx + 1) % dirs.length;
+  activeListDir = dirs[newIdx];
   resetResult(); // switching direction clears the current selection + result card
 
   // Slide the new direction's stops in, matching the thumb's travel direction.
@@ -579,10 +532,11 @@ function selectDirection(newDir, { focus = false } = {}) {
   updateUrl(); // direction changed, selection cleared
 
   flowThumb(el.stopDirToggle, oldIdx, newIdx);
-  if (focus) {
-    const seg = el.stopDirToggle.querySelector(`.dir-toggle__seg[data-dir="${newDir}"]`);
-    if (seg) seg.focus();
-  }
+}
+
+/** Keyboard activation for the toggle button (Enter / Space). */
+function onStopDirToggleKey(e) {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onStopDirToggle(); }
 }
 
 /**

@@ -337,12 +337,6 @@ html, body {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(255, 176, 0, 0.18);
 }
-/* Each direction is now its own tab (role="tab"); focus lands on the segment. */
-.dir-toggle__seg:focus-visible {
-  outline: none;
-  border-radius: calc(var(--radius) - 4px);
-  box-shadow: 0 0 0 2px var(--accent);
-}
 /* Nudge the inactive label brighter on hover to hint it's tappable. */
 .dir-toggle:not(.dir-toggle--static):hover .dir-toggle__seg:not([aria-selected="true"]) {
   color: var(--text);
