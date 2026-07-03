@@ -1,12 +1,13 @@
 name: Update bus data
 
 # Refresh the static per-service data shards from LTA DataMall.
-# Schedules rarely change, so weekly is plenty; workflow_dispatch lets you
-# trigger a manual run (e.g. the first time, to generate real data).
+# Runs daily so schedule tweaks and the public-holiday list are picked up
+# promptly; a run with no data changes commits nothing. workflow_dispatch lets
+# you trigger a manual run (e.g. the first time, to generate real data).
 on:
   schedule:
-    # 09:00 UTC every Monday = 17:00 Singapore time.
-    - cron: "0 9 * * 1"
+    # 09:00 UTC daily = 17:00 Singapore time.
+    - cron: "0 9 * * *"
   workflow_dispatch:
 
 # Allow the job to push the refreshed data back to the repo.
@@ -40,9 +41,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Stage shards, the index, and any removed services. holidays.json is
-          # maintained by hand and untouched by the fetch script.
-          git add -A data/svc data/services.json
+          # Stage shards, the index, any removed services, and the
+          # auto-refreshed public-holiday list.
+          git add -A data/svc data/services.json data/holidays.json
           # Only commit if the data actually changed.
           if git diff --staged --quiet; then
             echo "No changes to bus data — nothing to commit."
