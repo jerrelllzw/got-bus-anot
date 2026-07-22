@@ -1,6 +1,6 @@
 {
   "_note": "Singapore public holidays as YYYY-MM-DD (local). On these dates the app shows the 'Sun / PH' schedule. Refreshed automatically by scripts/fetch_data.py from the Nager.Date API (https://date.nager.at/) — dates are the observed holiday (a Sunday holiday's in-lieu Monday is included). Lunar/Islamic holidays are the source's best estimate and can occasionally differ by a day from MOM's gazette (https://www.mom.gov.sg/employment-practices/public-holidays); edit this file by hand if you need to override one.",
-  "generated": "2026-07-21T11:04:20Z",
+  "generated": "2026-07-22T11:05:14Z",
   "holidays": [
     "2026-01-01",
     "2026-02-17",
